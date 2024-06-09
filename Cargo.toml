@@ -1,0 +1,28 @@
+[package]
+name = "backtest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+charming = "0.3.1"
+chrono = "0.4"
+chrono-tz = "0.4"
+
+askama = "0.12.0"
+axum = "0.6.18"
+#image = "0.24.6"
+#chrono = "0.4"
+#lazy_static = "1.4.0"
+#rand = "0.8.5"
+rust_decimal = "1.6"
+tokio = { version = "1.38.0", features = ["full"] }
+tokio-macros = "=2.3.0"
+
+serde_json = "1.0.99"
+serde = "1.0.164"
+itertools = "0.11.0"
+iso8601-timestamp = "0.2.16"
+
+[[bin]]
+name = "gallery"
+path = "src/gallery.rs"
