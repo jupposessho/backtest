@@ -2,7 +2,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::{America::New_York, Tz};
 
 pub mod chart;
-mod model;
+pub mod model;
 mod strategies;
 
 pub fn to_new_york_time(timestamp: i64) -> DateTime<Tz> {

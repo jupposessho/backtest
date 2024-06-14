@@ -23,6 +23,15 @@ serde = "1.0.164"
 itertools = "0.11.0"
 iso8601-timestamp = "0.2.16"
 
+clap = "4.5.5"
+reqwest = { version = "0.11", features = ["json"] }
+anyhow = "1.0"
+dialoguer = "0.10"
+
 [[bin]]
 name = "gallery"
 path = "src/gallery.rs"
+
+[[bin]]
+name = "loader"
+path = "src/loader.rs"

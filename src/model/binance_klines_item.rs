@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct BinanceKlinesItem {
     pub open_time: u64,
