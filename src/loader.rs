@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
     let matches = Command::new("Binance CLI")
         .version("1.0")
         .author("Your Name <youremail@example.com>")
-        .about("Fetches data from Binance API")
+        .about("Fetches candlestick data from exchanges")
         .arg(
             Arg::new("start-time")
                 .short('s')
@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
                     "3d", "1w", "1M",
                 ])
                 .required(true)
-                .help("Kline/candlestick interval (e.g., 1m, 5m, 1h, 1d)"),
+                .help("Candlestick time frame (e.g., 1m, 5m, 1h, 1d)"),
         )
         .get_matches();
 
@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
 
     loop {
         let url = format!(
-            "https://api.binance.com/api/v1/klines?symbol={}&interval={}&startTime={}&limit=1",
+            "https://api.binance.com/api/v1/klines?symbol={}&interval={}&startTime={}&limit=1500",
             symbol, interval, start_time
         );
 
@@ -124,3 +124,5 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+// BTC/ETH: 1502942400000 - 2014-09-05T17:00:00Z

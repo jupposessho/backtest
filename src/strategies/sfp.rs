@@ -1,15 +1,18 @@
 use rust_decimal::Decimal;
 
 use crate::model::backtest_result::BacktestResult;
-use crate::model::candle_stick::{CandleStick, DecimalVec};
+use crate::model::candle_stick::CandleStick;
 use crate::model::position::Position;
 use crate::model::position_direction::PositionDirection;
 use crate::model::trade::Trade;
 use crate::model::trade_result::TradeResult;
 use crate::model::trading_model::TradingModel;
 
+use super::lib::add_to_swings;
+
 pub struct Sfp {
-    pub(crate) data: Vec<CandleStick>,
+    pub rr_treshold: Decimal,
+    pub data: Vec<CandleStick>,
 }
 
 impl TradingModel for Sfp {
@@ -88,7 +91,7 @@ impl TradingModel for Sfp {
                         sl: actual.high,
                         tp: prev_low.unwrap().low,
                     };
-                    if position_candidate.rr().0 >= Decimal::from(2) {
+                    if position_candidate.rr().0 >= self.rr_treshold {
                         position = Some(position_candidate);
                     }
                 }
@@ -110,22 +113,12 @@ impl TradingModel for Sfp {
                         sl: actual.low,
                         tp: prev_high.unwrap().high,
                     };
-                    if position_candidate.rr().0 >= Decimal::from(2) {
+                    if position_candidate.rr().0 >= self.rr_treshold {
                         position = Some(position_candidate);
                     }
                 }
 
-                // swings
-                if actual.high > previous.high && actual.high > next.high {
-                    // remove previous highs with lower high
-                    swing_highs.retain(|&c: &CandleStick| c.high >= actual.high);
-                    swing_highs.push(actual);
-                }
-                if actual.low < previous.low && actual.low < next.low {
-                    // remove previous lows with higher lows
-                    swing_lows.retain(|&c: &CandleStick| c.low <= actual.low);
-                    swing_lows.push(actual);
-                }
+                add_to_swings(&mut swing_lows, &mut swing_highs, actual, previous, next)
             }
             ind = ind + 1;
         }

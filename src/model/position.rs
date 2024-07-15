@@ -1,7 +1,7 @@
 use super::position_direction::PositionDirection;
-use crate::model::candle_stick::DecimalVec;
+use crate::model::decimal::DecimalVec;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
     pub direction: PositionDirection,
     pub open_time: i64,

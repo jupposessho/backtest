@@ -1,8 +1,6 @@
 use std::fmt;
 
-use rust_decimal::Decimal;
-
-use crate::model::candle_stick::DecimalVec;
+use crate::model::decimal::DecimalVec;
 use crate::to_new_york_time;
 
 use super::{position::Position, position_direction::PositionDirection, trade_result::TradeResult};

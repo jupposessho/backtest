@@ -1,8 +1,12 @@
 pub mod backtest_result;
 pub mod binance_klines_item;
+pub mod candle_ny;
 pub mod candle_stick;
+pub mod decimal;
 pub mod position;
 pub mod position_direction;
+pub mod session;
 pub mod trade;
 pub mod trade_result;
 pub mod trading_model;
+pub mod trigger_type;
