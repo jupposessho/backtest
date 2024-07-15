@@ -90,6 +90,7 @@ impl TradingModel for Sfp {
                         entry: actual.close,
                         sl: actual.high,
                         tp: prev_low.unwrap().low,
+                        at_break_even: false,
                     };
                     if position_candidate.rr().0 >= self.rr_treshold {
                         position = Some(position_candidate);
@@ -112,6 +113,7 @@ impl TradingModel for Sfp {
                         entry: actual.close,
                         sl: actual.low,
                         tp: prev_high.unwrap().high,
+                        at_break_even: false,
                     };
                     if position_candidate.rr().0 >= self.rr_treshold {
                         position = Some(position_candidate);

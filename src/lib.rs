@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone};
 use chrono_tz::{America::New_York, Tz};
 use model::candle_ny::CandleNY;
 use model::decimal::DecimalVec;

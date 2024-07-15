@@ -138,6 +138,7 @@ pub fn trigger_mayne(
             entry: tc.close,
             sl, // TODO: can we refine this? eg: previous swing high on ltf
             tp,
+            at_break_even: false,
         };
 
         if position.rr().0 >= rr_threshold {

@@ -12,19 +12,11 @@ impl BacktestResult {
     pub fn number_of_trades(&self) -> usize {
         self.trades.len()
     }
-    pub fn winners(&self) -> usize {
+    pub fn result(&self, tr: TradeResult) -> usize {
         self.trades
             .clone()
             .into_iter()
-            .filter(|x| x.result == TradeResult::Winner)
-            .collect::<Vec<_>>()
-            .len()
-    }
-    pub fn expenses(&self) -> usize {
-        self.trades
-            .clone()
-            .into_iter()
-            .filter(|x| x.result == TradeResult::Expense)
+            .filter(|x| x.result == tr)
             .collect::<Vec<_>>()
             .len()
     }
@@ -46,8 +38,9 @@ impl fmt::Debug for BacktestResult {
         f.debug_struct("BacktestResult")
             .field("trades", &self.trades)
             .field("number_of_trades", &self.number_of_trades())
-            .field("winners", &self.winners())
-            .field("expenses", &self.expenses())
+            .field("winners", &self.result(TradeResult::Winner))
+            .field("expenses", &self.result(TradeResult::Expense))
+            .field("break_evens", &self.result(TradeResult::BreakEven))
             .field("profit_in_r", &self.profit_in_r())
             .finish()
     }

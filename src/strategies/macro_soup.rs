@@ -19,6 +19,7 @@ pub struct MacroSoup {
     pub session: Session,
     pub candles: Vec<CandleNY>,
     pub max_duration_min: i64,
+    pub be_threshold: Option<DecimalVec>,
 }
 
 impl MacroSoup {
@@ -57,7 +58,8 @@ impl MacroSoup {
                         open_time: actual.open_time.timestamp(), // TODO: check with proper timezone
                         entry: actual.close,
                         sl: max,
-                        tp: session_low - (session_high - session_low), // stdv1
+                        tp: session_low - (session_high - session_low), // stdv1,
+                        at_break_even: false,
                     });
                 }
             }
@@ -78,6 +80,7 @@ impl MacroSoup {
                         entry: actual.close,
                         sl: min,
                         tp: session_high + (session_high - session_low), // stdv1
+                        at_break_even: false,
                     });
                 }
             }
@@ -85,39 +88,63 @@ impl MacroSoup {
         None
     }
 
-    pub fn run_trade(position: Position, candles: Vec<&CandleNY>) -> Option<Trade> {
+    // TODO: test
+    pub fn run_trade(
+        position: Position,
+        candles: Vec<&CandleNY>,
+        be_threshold: Option<DecimalVec>,
+    ) -> Option<Trade> {
+        let mut p = position.clone();
         for actual in candles {
-            match position.direction {
+            match p.direction {
                 PositionDirection::Short => {
-                    if position.sl < actual.high {
+                    if p.sl < actual.high {
                         return Some(Trade::from_position(
-                            position,
+                            p,
                             actual.open_time.timestamp(),
-                            TradeResult::Expense,
+                            if p.at_break_even {
+                                TradeResult::BreakEven
+                            } else {
+                                TradeResult::Expense
+                            },
                         ));
                     }
-                    if position.tp > actual.low {
+                    if p.tp > actual.low {
                         return Some(Trade::from_position(
-                            position,
+                            p,
                             actual.open_time.timestamp(),
                             TradeResult::Winner,
                         ));
+                    }
+                    if let Some(bet) = be_threshold {
+                        if actual.low < p.entry && p.actual_rr(actual.low) > bet {
+                            p.move_to_break_even();
+                        }
                     }
                 }
                 PositionDirection::Long => {
-                    if position.sl > actual.low {
+                    if p.sl > actual.low {
                         return Some(Trade::from_position(
-                            position,
+                            p,
                             actual.open_time.timestamp(),
-                            TradeResult::Expense,
+                            if p.at_break_even {
+                                TradeResult::BreakEven
+                            } else {
+                                TradeResult::Expense
+                            },
                         ));
                     }
-                    if position.tp < actual.high {
+                    if p.tp < actual.high {
                         return Some(Trade::from_position(
-                            position,
+                            p,
                             actual.open_time.timestamp(),
                             TradeResult::Winner,
                         ));
+                    }
+                    if let Some(bet) = be_threshold {
+                        if actual.high > p.entry && p.actual_rr(actual.high) > bet {
+                            p.move_to_break_even();
+                        }
                     }
                 }
             }
@@ -135,7 +162,6 @@ impl TradingModel for MacroSoup {
 
         for actual in self.candles.clone() {
             if in_session(&self.session, actual.open_time) {
-                println!("+++++++++ {}", actual.open_time);
                 match session_low {
                     Some(s) => {
                         if s > actual.low {
@@ -154,7 +180,6 @@ impl TradingModel for MacroSoup {
                 }
                 last_candle_in_session = true;
             } else if last_candle_in_session {
-                println!("+++++last++++ {}", actual.open_time);
                 let c = self.candles.clone();
                 let candles_after_session = c
                     .iter()
@@ -168,14 +193,14 @@ impl TradingModel for MacroSoup {
                     session_low.unwrap(),
                     self.max_duration_min,
                 ) {
-                    println!("+++++position++++ {}", position.rr().0);
                     if position.rr().0 >= self.rr_threshold {
                         let c = self.candles.clone();
                         let candles_after_entry = c
                             .iter()
                             .skip_while(|x| x.open_time.timestamp() <= position.open_time)
                             .collect_vec();
-                        let trade = Self::run_trade(position, candles_after_entry);
+                        let trade =
+                            Self::run_trade(position, candles_after_entry, self.be_threshold);
                         if let Some(t) = trade {
                             trades.push(t)
                         }
@@ -193,11 +218,10 @@ impl TradingModel for MacroSoup {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Utc};
     use lazy_static::lazy_static;
 
     use super::*;
-    use crate::{parse_datetime, to_new_york_time};
+    use crate::parse_datetime;
     use rust_decimal::Decimal;
 
     fn date(date_time: &str) -> chrono::DateTime<chrono_tz::Tz> {
@@ -250,6 +274,7 @@ mod tests {
             entry: DecimalVec::new(85),
             sl: DecimalVec::new(110),
             tp: DecimalVec::new(20),
+            at_break_even: false,
         };
         assert_eq!(result, Some(expected));
     }
@@ -273,6 +298,7 @@ mod tests {
             entry: DecimalVec::new(95),
             sl: DecimalVec::new(120),
             tp: DecimalVec::new(20),
+            at_break_even: false,
         };
         assert_eq!(result, Some(expected));
     }
@@ -298,6 +324,7 @@ mod tests {
             entry: DecimalVec::new(80),
             sl: DecimalVec::new(50),
             tp: DecimalVec::new(140),
+            at_break_even: false,
         };
         assert_eq!(result, Some(expected));
     }
@@ -321,6 +348,7 @@ mod tests {
             entry: DecimalVec::new(65),
             sl: DecimalVec::new(45),
             tp: DecimalVec::new(140),
+            at_break_even: false,
         };
         assert_eq!(result, Some(expected));
     }

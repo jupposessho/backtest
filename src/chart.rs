@@ -162,6 +162,8 @@ pub fn chart() -> Chart {
     let sfp = MacroSoup {
         candles: candlesticks.clone(),
         rr_threshold: Decimal::from(3),
+        be_threshold: Some(DecimalVec::new(2)),
+
         session: Session {
             start: parse_datetime("2022-09-30 09:50:00").unwrap().time(),
             end: parse_datetime("2022-09-30 10:10:00").unwrap().time(),
