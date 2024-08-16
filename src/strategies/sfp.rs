@@ -125,6 +125,9 @@ impl TradingModel for Sfp {
             ind = ind + 1;
         }
 
-        BacktestResult { trades }
+        BacktestResult {
+            trades,
+            capital: Decimal::from(1000),
+        }
     }
 }

@@ -212,7 +212,10 @@ impl TradingModel for MacroSoup {
             }
         }
 
-        BacktestResult { trades }
+        BacktestResult {
+            trades,
+            capital: Decimal::from(1000),
+        }
     }
 }
 

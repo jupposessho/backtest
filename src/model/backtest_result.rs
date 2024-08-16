@@ -1,11 +1,12 @@
 use std::fmt;
 
-use rust_decimal::Decimal;
+use rust_decimal::{prelude::FromPrimitive, Decimal};
 
 use super::{trade::Trade, trade_result::TradeResult};
 
 pub struct BacktestResult {
     pub trades: Vec<Trade>,
+    pub capital: Decimal,
 }
 
 impl BacktestResult {
@@ -31,6 +32,19 @@ impl BacktestResult {
             })
             .sum()
     }
+    pub fn pnl(&self) -> Decimal {
+        let r = Decimal::from_f32(0.01).unwrap();
+        let result = self
+            .trades
+            .clone()
+            .iter()
+            .fold(self.capital, |acc, &x| match x.result {
+                TradeResult::Winner => acc + acc * r * x.rr().0.trunc_with_scale(2),
+                TradeResult::Expense => acc - acc * r,
+                TradeResult::BreakEven => acc,
+            });
+        ((result - self.capital) / self.capital * Decimal::from(100)).trunc_with_scale(2)
+    }
 }
 
 impl fmt::Debug for BacktestResult {
@@ -42,6 +56,7 @@ impl fmt::Debug for BacktestResult {
             .field("expenses", &self.result(TradeResult::Expense))
             .field("break_evens", &self.result(TradeResult::BreakEven))
             .field("profit_in_r", &self.profit_in_r())
+            .field("pnl_pct", &self.pnl())
             .finish()
     }
 }

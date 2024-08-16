@@ -40,5 +40,5 @@ name = "loader"
 path = "src/loader.rs"
 
 [[bin]]
-name = "ws"
-path = "src/ws.rs"
+name = "ms"
+path = "src/ms.rs"
