@@ -40,5 +40,9 @@ name = "loader"
 path = "src/loader.rs"
 
 [[bin]]
+name = "loader_binance"
+path = "src/loader_binance.rs"
+
+[[bin]]
 name = "ms"
 path = "src/ms.rs"

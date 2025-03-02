@@ -12,40 +12,28 @@ use charming::{
     Chart,
 };
 use rust_decimal::Decimal;
-use std::str::FromStr;
 
-use crate::{execute, model::candle_ny::CandleNY, strategies::macro_soup::MacroSoup};
 use crate::{
-    model::{binance_klines_item::BinanceKlinesItem, candle_stick::CandleStick},
-    read_csv,
+    candle_stick_loader::CandleStickLoader,
+    model::{candle_stick::CandleStick, sl_trategy::SlStrategy},
 };
 use crate::{
+    execute,
     model::{decimal::DecimalVec, session::Session},
     parse_datetime,
+    strategies::macro_soup::MacroSoup,
+    to_new_york_time,
 };
 
-// TODO: extract to data loader
-fn load_data() -> Vec<CandleStick> {
-    let raw_data: Vec<BinanceKlinesItem> =
-        serde_json::from_str(include_str!("../assets/eth15.json")).unwrap();
-    // serde_json::from_str(include_str!("../assets/ETHUSDT_15m.json")).unwrap();
-
-    raw_data
-        .iter()
-        .enumerate()
-        .map(|(_, v)| CandleStick {
-            open_time: v.open_time as i64,
-            open: DecimalVec(Decimal::from_str(v.open.as_str()).unwrap()),
-            high: DecimalVec(Decimal::from_str(v.high.as_str()).unwrap()),
-            low: DecimalVec(Decimal::from_str(v.low.as_str()).unwrap()),
-            close: DecimalVec(Decimal::from_str(v.close.as_str()).unwrap()),
-            close_time: v.close_time as i64,
-        })
-        .collect::<Vec<_>>()
-}
-
-fn load_csv() -> Vec<CandleNY> {
-    read_csv("/Users/jupposessho/develop/play/rust/backtest/assets/NDX_full_1min.txt").unwrap()
+fn load_csv() -> Vec<CandleStick> {
+    CandleStickLoader::load_binance(include_str!(
+        "../assets/binance_BTC_1m_2024-08-16-2025-08-01.json"
+    ))
+    // CandleStickLoader::load(include_str!("../assets/bitget_BTCUSDT_1m.json"))
+    // CandleStickLoader::load_csv(
+    //     "/Users/jupposessho/develop/play/rust/backtest/assets/NDX_full_1min.txt",
+    // )
+    // .unwrap()
 }
 
 // fn round_to_near
@@ -88,13 +76,18 @@ pub fn chart() -> Chart {
             start: parse_datetime("2022-09-30 09:50:00").unwrap().time(),
             end: parse_datetime("2022-09-30 10:10:00").unwrap().time(),
         },
+        sl_strategy: SlStrategy::None,
         max_duration_min: 30,
     };
     let result = execute(sfp);
     println!("============result {:#?}", result);
     let category_data = candlesticks
         .iter()
-        .map(|x| x.open_time.format("%Y-%m-%d %H:%M:%S").to_string())
+        .map(|x| {
+            to_new_york_time(x.open_time)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        })
         .collect::<Vec<_>>();
     let data = candlesticks
         .iter()

@@ -3,7 +3,7 @@ use core::fmt;
 use chrono::DateTime;
 use chrono_tz::Tz;
 
-use super::{candle_stick::CandleStick, decimal::DecimalVec};
+use super::decimal::DecimalVec;
 
 #[derive(Clone, PartialEq)]
 pub struct CandleNY {

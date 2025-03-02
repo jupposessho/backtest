@@ -196,7 +196,10 @@ pub fn run_trade(position: Position, candles: Vec<&CandleStick>) -> Option<Trade
 }
 
 pub fn in_session(session: &Session, open_time: DateTime<Tz>) -> bool {
-    open_time.time() >= session.start && open_time.time() < session.end
+    // println!("opentime:{}", open_time.time());
+    // println!("sessionstart:{}", session.start);
+    // println!("sessionend:{}", session.end);
+    open_time.time() >= session.start && open_time.time() <= session.end
 }
 
 #[cfg(test)]

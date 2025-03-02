@@ -1,13 +1,12 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone};
 use chrono_tz::{America::New_York, Tz};
 use model::backtest_result::BacktestResult;
-use model::candle_ny::CandleNY;
 use model::decimal::DecimalVec;
 use model::trading_model::TradingModel;
 use rust_decimal::Decimal;
-use std::io::{self, BufRead};
-use std::{error::Error, fs::File, path::Path};
+use std::error::Error;
 
+pub mod candle_stick_loader;
 pub mod chart;
 pub mod model;
 pub mod strategies;
@@ -29,35 +28,6 @@ pub fn parse_datetime(s: &str) -> Result<DateTime<Tz>, Box<dyn Error>> {
         .single()
         .expect("Failed to convert to New York time");
     Ok(ny_datetime)
-}
-
-pub fn read_csv(file_path: &str) -> Result<Vec<CandleNY>, Box<dyn Error>> {
-    let path = Path::new(file_path);
-    let file = File::open(&path)?;
-    let reader = io::BufReader::new(file);
-
-    let mut candlesticks = Vec::new();
-
-    for (_, line) in reader.lines().enumerate() {
-        let line = line?;
-
-        let fields: Vec<&str> = line.split(',').collect();
-        if fields.len() != 5 {
-            return Err(Box::from("Invalid CSV format"));
-        }
-
-        let candlestick = CandleNY {
-            open_time: parse_datetime(fields[0])?,
-            open: parse_decimal(fields[1])?,
-            high: parse_decimal(fields[2])?,
-            low: parse_decimal(fields[3])?,
-            close: parse_decimal(fields[4])?,
-        };
-
-        candlesticks.push(candlestick);
-    }
-
-    Ok(candlesticks)
 }
 
 pub fn execute<T: TradingModel>(model: T) -> BacktestResult {

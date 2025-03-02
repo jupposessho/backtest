@@ -1,16 +1,20 @@
 use std::ops::{Add, Div, Sub};
+use std::str::FromStr;
 
 use charming::datatype::NumericValue;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialOrd, PartialEq)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialOrd, PartialEq, Serialize)]
 pub struct DecimalVec(pub Decimal);
 
 impl DecimalVec {
     pub fn new(v: i32) -> Self {
         DecimalVec(rust_decimal::Decimal::from(v))
+    }
+    pub fn from_str(v: &String) -> Self {
+        DecimalVec(rust_decimal::Decimal::from_str(v.as_str()).unwrap())
     }
 }
 

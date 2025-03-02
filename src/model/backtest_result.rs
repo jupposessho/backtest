@@ -4,6 +4,7 @@ use rust_decimal::{prelude::FromPrimitive, Decimal};
 
 use super::{trade::Trade, trade_result::TradeResult};
 
+#[derive(Clone)]
 pub struct BacktestResult {
     pub trades: Vec<Trade>,
     pub capital: Decimal,
@@ -22,7 +23,8 @@ impl BacktestResult {
             .len()
     }
     pub fn profit_in_r(&self) -> Decimal {
-        self.trades
+        let r: Decimal = self
+            .trades
             .clone()
             .into_iter()
             .map(|x| match x.result {
@@ -30,8 +32,15 @@ impl BacktestResult {
                 TradeResult::Expense => Decimal::from(-1),
                 TradeResult::BreakEven => Decimal::from(0),
             })
-            .sum()
+            .sum();
+        r.trunc_with_scale(2)
     }
+
+    pub fn profit_in_points(&self) -> Decimal {
+        let r: Decimal = self.trades.clone().into_iter().map(|x| x.points().0).sum();
+        r.trunc_with_scale(2)
+    }
+
     pub fn pnl(&self) -> Decimal {
         let r = Decimal::from_f32(0.01).unwrap();
         let result = self
@@ -50,12 +59,13 @@ impl BacktestResult {
 impl fmt::Debug for BacktestResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("BacktestResult")
-            .field("trades", &self.trades)
+            // .field("trades", &self.trades)
             .field("number_of_trades", &self.number_of_trades())
             .field("winners", &self.result(TradeResult::Winner))
             .field("expenses", &self.result(TradeResult::Expense))
             .field("break_evens", &self.result(TradeResult::BreakEven))
             .field("profit_in_r", &self.profit_in_r())
+            .field("points", &self.profit_in_points())
             .field("pnl_pct", &self.pnl())
             .finish()
     }
