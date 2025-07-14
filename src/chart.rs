@@ -26,9 +26,13 @@ use crate::{
 };
 
 fn load_csv() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTC_1m_2024-08-16-2025-08-01.json"
-    ))
+    //     CandleStickLoader::load_binance(include_str!(
+    //         "../assets/binance_BTC_1m_2024-08-16-2025-03-01.json"
+    //     ))
+    CandleStickLoader::load_bar_chart(
+        "/Users/jupposessho/develop/play/rust/backtest/assets/es1m_sample.json",
+    )
+    .unwrap()
     // CandleStickLoader::load(include_str!("../assets/bitget_BTCUSDT_1m.json"))
     // CandleStickLoader::load_csv(
     //     "/Users/jupposessho/develop/play/rust/backtest/assets/NDX_full_1min.txt",

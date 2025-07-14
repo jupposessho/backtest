@@ -17,8 +17,7 @@ use rust_decimal::Decimal;
 fn load_binance() -> Vec<CandleStick> {
     CandleStickLoader::load_binance(include_str!(
         // "../assets/binance_BTC_1m_2017-08-17-2024-08-16.json"
-        // "../assets/binance_BTC_1m_2024-08-16-2025-08-01.json"
-        "../assets/binance_BTC_5m_2024-08-16-2025-08-01.json"
+        "../assets/binance_BTC_1m_2024-08-16-2025-03-01.json" // "../assets/binance_BTC_5m_2024-08-16-2025-03-01.json"
     ))
     // CandleStickLoader::load_binance(include_str!("../assets/BTCUSDT_1m.json"))
 }
@@ -39,13 +38,13 @@ fn main() {
             rr_threshold: Decimal::from(3),
             be_threshold: Some(DecimalVec::new(2)),
             session: Session {
-                start: start,
+                start,
                 end: session_end,
             },
-            // sl_strategy: SlStrategy::None,
-            // sl_strategy: SlStrategy::Skip(DecimalVec::new(500)),
-            sl_strategy: SlStrategy::Limit(DecimalVec::new(500)),
-            max_duration_min: 30,
+            sl_strategy: SlStrategy::None,
+            // sl_strategy: SlStrategy::Skip(DecimalVec::new(250)),
+            // sl_strategy: SlStrategy::Limit(DecimalVec::new(500)),
+            max_duration_min: 120,
         };
         let result: BacktestResult = execute(sfp);
 

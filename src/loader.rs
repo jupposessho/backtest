@@ -1,7 +1,9 @@
 use anyhow::Result;
-use backtest::model::binance_klines_item::BinanceKlinesItem;
+use backtest::model::bitget_klines_item::MexcKlinesItem;
+use backtest::model::candle_stick::CandleStick;
 use clap::{Arg, Command};
 use dialoguer::Confirm;
+
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -9,9 +11,9 @@ use tokio;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let matches = Command::new("Binance CLI")
+    let matches = Command::new("Candlestick data loader CLI")
         .version("1.0")
-        .author("Your Name <youremail@example.com>")
+        // .author("Vilmos Feher <youremail@example.com>")
         .about("Fetches candlestick data from exchanges")
         .arg(
             Arg::new("start-time")
@@ -40,6 +42,14 @@ async fn main() -> Result<()> {
                 .required(true)
                 .help("Candlestick time frame (e.g., 1m, 5m, 1h, 1d)"),
         )
+        .arg(
+            Arg::new("exchange")
+                .short('e')
+                .long("exchange")
+                .value_parser(["binance", "bitget", "mexc"])
+                .required(true)
+                .help("Exchange name (e.g., binance, bitget, mexc)"),
+        )
         .get_matches();
 
     let mut start_time = *matches
@@ -51,6 +61,9 @@ async fn main() -> Result<()> {
     let interval = matches
         .get_one::<String>("interval")
         .expect("interval is a required argument");
+    let exchange = matches
+        .get_one::<String>("exchange")
+        .expect("exchange is a required argument");
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -63,7 +76,7 @@ async fn main() -> Result<()> {
     }
 
     // File path
-    let file_path = assets_dir.join(format!("{}_{}.json", symbol, interval));
+    let file_path = assets_dir.join(format!("{}_{}_{}.json", exchange, symbol, interval));
 
     // Check if file exists and prompt for overwrite
     if file_path.exists() {
@@ -79,11 +92,12 @@ async fn main() -> Result<()> {
             return Ok(());
         }
     }
-    let mut all_klines: Vec<BinanceKlinesItem> = Vec::new();
+    let mut all_klines: Vec<CandleStick> = Vec::new();
 
     loop {
         let url = format!(
-            "https://api.binance.com/api/v1/klines?symbol={}&interval={}&startTime={}&limit=1500",
+            // "https://api.bitget.com/api/v2/mix/market/history-candles?symbol={}&granularity={}&startTime={}&limit=200&productType=usdt-futures",
+            "https://api.mexc.com/api/v3/klines?symbol={}&interval={}&startTime={}&limit=1000",
             symbol, interval, start_time
         );
 
@@ -91,22 +105,24 @@ async fn main() -> Result<()> {
 
         let status = response.status();
         let text = response.text().await?;
+        println!("text: {}", text);
 
         if status.is_success() {
-            let klines: Vec<BinanceKlinesItem> =
-                serde_json::from_str(&text).unwrap_or_else(|err| {
-                    println!("Failed to parse response: {}", err);
-                    Vec::new()
-                });
+            let data: Vec<MexcKlinesItem> = serde_json::from_str(&text).unwrap();
+            // let data: Vec<BitgetKlinesItem> = response.data;
+            let klines: Vec<CandleStick> = data
+                .iter()
+                .map(|x| CandleStick::from(x.clone()))
+                .collect::<Vec<_>>();
 
-            if klines.is_empty() {
+            if klines.is_empty() || klines.last().unwrap().close_time * 1000 == start_time as i64 {
                 println!("No more data available.");
                 break;
             }
 
             for kline in klines {
                 println!("{:?}", kline);
-                start_time = kline.close_time;
+                start_time = kline.close_time as u64 * 1000;
                 all_klines.push(kline);
             }
         } else {
@@ -120,9 +136,10 @@ async fn main() -> Result<()> {
     let json_data = serde_json::to_string_pretty(&all_klines)?;
     fs::write(file_path, json_data)?;
 
-    println!("Data saved to assets/{}_{}.json", symbol, interval);
+    println!(
+        "Data saved to assets/{}_{}_{}.json",
+        exchange, symbol, interval
+    );
 
     Ok(())
 }
-
-// BTC/ETH: 1502942400000 - 2014-09-05T17:00:00Z
