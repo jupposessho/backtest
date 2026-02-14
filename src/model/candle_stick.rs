@@ -1,10 +1,10 @@
 use crate::to_new_york_time;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use super::decimal::DecimalVec;
 
-#[derive(Clone, Copy, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct CandleStick {
     pub open_time: i64,
@@ -15,6 +15,14 @@ pub struct CandleStick {
     pub close_time: i64,
 }
 
+impl CandleStick {
+    pub fn upclose(self) -> bool {
+        self.close > self.open
+    }
+    pub fn downclose(self) -> bool {
+        self.close < self.open
+    }
+}
 impl fmt::Debug for CandleStick {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let o = to_new_york_time(self.open_time.clone())

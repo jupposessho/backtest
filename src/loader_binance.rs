@@ -1,9 +1,7 @@
 use anyhow::Result;
-use backtest::model::bitget_klines_item::MexcKlinesItem;
-use backtest::model::candle_stick::CandleStick;
+use backtest::model::binance_klines_item::BinanceKlinesItem;
 use clap::{Arg, Command};
 use dialoguer::Confirm;
-
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -13,7 +11,7 @@ use tokio;
 async fn main() -> Result<()> {
     let matches = Command::new("Candlestick data loader CLI")
         .version("1.0")
-        // .author("Vilmos Feher <youremail@example.com>")
+        .author("Your Name <youremail@example.com>")
         .about("Fetches candlestick data from exchanges")
         .arg(
             Arg::new("start-time")
@@ -92,12 +90,11 @@ async fn main() -> Result<()> {
             return Ok(());
         }
     }
-    let mut all_klines: Vec<CandleStick> = Vec::new();
+    let mut all_klines: Vec<BinanceKlinesItem> = Vec::new();
 
     loop {
         let url = format!(
-            // "https://api.bitget.com/api/v2/mix/market/history-candles?symbol={}&granularity={}&startTime={}&limit=200&productType=usdt-futures",
-            "https://api.mexc.com/api/v3/klines?symbol={}&interval={}&startTime={}&limit=1000",
+            "https://api.binance.com/api/v1/klines?symbol={}&interval={}&startTime={}&limit=1500",
             symbol, interval, start_time
         );
 
@@ -105,24 +102,22 @@ async fn main() -> Result<()> {
 
         let status = response.status();
         let text = response.text().await?;
-        println!("text: {}", text);
 
         if status.is_success() {
-            let data: Vec<MexcKlinesItem> = serde_json::from_str(&text).unwrap();
-            // let data: Vec<BitgetKlinesItem> = response.data;
-            let klines: Vec<CandleStick> = data
-                .iter()
-                .map(|x| CandleStick::from(x.clone()))
-                .collect::<Vec<_>>();
+            let klines: Vec<BinanceKlinesItem> =
+                serde_json::from_str(&text).unwrap_or_else(|err| {
+                    println!("Failed to parse response: {}", err);
+                    Vec::new()
+                });
 
-            if klines.is_empty() || klines.last().unwrap().close_time * 1000 == start_time as i64 {
+            if klines.is_empty() {
                 println!("No more data available.");
                 break;
             }
 
             for kline in klines {
                 println!("{:?}", kline);
-                start_time = kline.close_time as u64 * 1000;
+                start_time = kline.close_time;
                 all_klines.push(kline);
             }
         } else {
@@ -143,3 +138,5 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+// BTC/ETH: 1502942400000 - 2014-09-05T17:00:00Z

@@ -1,15 +1,16 @@
-use chrono::Duration;
 use itertools::Itertools;
 use rust_decimal::Decimal;
 
 use crate::model::backtest_result::BacktestResult;
-use crate::model::candle_ny::CandleNY;
+use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
 use crate::model::position::Position;
 use crate::model::session::Session;
+use crate::model::sl_trategy::SlStrategy;
 use crate::model::trade::Trade;
 use crate::model::trade_result::TradeResult;
 use crate::model::trading_model::TradingModel;
+use crate::to_new_york_time;
 
 use super::lib::in_session;
 use crate::model::position_direction::PositionDirection;
@@ -17,24 +18,25 @@ use crate::model::position_direction::PositionDirection;
 pub struct MacroSoup {
     pub rr_threshold: Decimal,
     pub session: Session,
-    pub candles: Vec<CandleNY>,
+    pub candles: Vec<CandleStick>,
     pub max_duration_min: i64,
     pub be_threshold: Option<DecimalVec>,
+    pub sl_strategy: SlStrategy,
 }
 
 impl MacroSoup {
     // looking for candles out of the range
     pub fn trigger_or_invalidation(
-        candles: Vec<&CandleNY>,
+        candles: Vec<&CandleStick>,
         session_high: DecimalVec,
         session_low: DecimalVec,
         max_duration_min: i64,
+        sl_strategy: SlStrategy,
     ) -> Option<Position> {
         if candles.len() < 1 {
             return None;
         }
-        let time_threshold =
-            candles.first().unwrap().open_time + Duration::minutes(max_duration_min);
+        let time_threshold = candles.first().unwrap().open_time + (max_duration_min * 60);
         let mut out_max: Option<DecimalVec> = None;
         let mut out_min: Option<DecimalVec> = None;
         // let out_direction_up = None;
@@ -51,16 +53,48 @@ impl MacroSoup {
             }
 
             if let Some(max) = out_max {
-                // TODO: check w/ and w/o actual.bearish check
-                if actual.close < session_high && actual.clone().bearish() {
-                    return Some(Position {
-                        direction: PositionDirection::Short,
-                        open_time: actual.open_time.timestamp(), // TODO: check with proper timezone
-                        entry: actual.close,
-                        sl: max,
-                        tp: session_low - (session_high - session_low), // stdv1,
-                        at_break_even: false,
-                    });
+                if actual.close < session_high {
+                    fn long(
+                        actual: &CandleStick,
+                        session_high: DecimalVec,
+                        session_low: DecimalVec,
+                        sl: DecimalVec,
+                    ) -> Position {
+                        Position {
+                            direction: PositionDirection::Short,
+                            open_time: actual.open_time, // TODO: check with proper timezone
+                            entry: actual.close,
+                            sl,
+                            tp: session_low
+                        // - (session_high - session_low)  // stdv1,
+                        - (session_high - session_low), // stdv2,
+                            at_break_even: false,
+                        }
+                    }
+                    match sl_strategy {
+                        SlStrategy::Skip(max_sl) => {
+                            if max - actual.close < max_sl {
+                                return Some(long(actual, session_high, session_low, max));
+                            } else {
+                                return None;
+                            }
+                        }
+                        SlStrategy::Limit(max_sl) => {
+                            return Some(long(
+                                actual,
+                                session_high,
+                                session_low,
+                                if max - actual.close > max_sl {
+                                    actual.close + max_sl
+                                } else {
+                                    max
+                                },
+                            ));
+                        }
+                        SlStrategy::None => {
+                            return Some(long(actual, session_high, session_low, max));
+                        }
+                    }
                 }
             }
 
@@ -72,16 +106,48 @@ impl MacroSoup {
             }
 
             if let Some(min) = out_min {
-                // TODO: check w/ and w/o actual.bearish check
-                if actual.close > session_low && actual.clone().bullish() {
-                    return Some(Position {
-                        direction: PositionDirection::Long,
-                        open_time: actual.open_time.timestamp(), // TODO: check with proper timezone
-                        entry: actual.close,
-                        sl: min,
-                        tp: session_high + (session_high - session_low), // stdv1
-                        at_break_even: false,
-                    });
+                if actual.close > session_low {
+                    fn long(
+                        actual: &CandleStick,
+                        session_high: DecimalVec,
+                        session_low: DecimalVec,
+                        sl: DecimalVec,
+                    ) -> Position {
+                        Position {
+                            direction: PositionDirection::Long,
+                            open_time: actual.open_time, // TODO: check with proper timezone
+                            entry: actual.close,
+                            sl,
+                            tp: session_high
+                    // + (session_high - session_low)  // stdv1
+                    + (session_high - session_low), // stdv2
+                            at_break_even: false,
+                        }
+                    }
+                    match sl_strategy {
+                        SlStrategy::Skip(max_sl) => {
+                            if actual.close - min < max_sl {
+                                return Some(long(actual, session_high, session_low, min));
+                            } else {
+                                return None;
+                            }
+                        }
+                        SlStrategy::Limit(max_sl) => {
+                            return Some(long(
+                                actual,
+                                session_high,
+                                session_low,
+                                if actual.close - min > max_sl {
+                                    actual.close - max_sl
+                                } else {
+                                    min
+                                },
+                            ));
+                        }
+                        SlStrategy::None => {
+                            return Some(long(actual, session_high, session_low, min));
+                        }
+                    }
                 }
             }
         }
@@ -91,7 +157,7 @@ impl MacroSoup {
     // TODO: test
     pub fn run_trade(
         position: Position,
-        candles: Vec<&CandleNY>,
+        candles: Vec<&CandleStick>,
         be_threshold: Option<DecimalVec>,
     ) -> Option<Trade> {
         let mut p = position.clone();
@@ -101,7 +167,7 @@ impl MacroSoup {
                     if p.sl < actual.high {
                         return Some(Trade::from_position(
                             p,
-                            actual.open_time.timestamp(),
+                            actual.open_time,
                             if p.at_break_even {
                                 TradeResult::BreakEven
                             } else {
@@ -112,7 +178,7 @@ impl MacroSoup {
                     if p.tp > actual.low {
                         return Some(Trade::from_position(
                             p,
-                            actual.open_time.timestamp(),
+                            actual.open_time,
                             TradeResult::Winner,
                         ));
                     }
@@ -126,7 +192,7 @@ impl MacroSoup {
                     if p.sl > actual.low {
                         return Some(Trade::from_position(
                             p,
-                            actual.open_time.timestamp(),
+                            actual.open_time,
                             if p.at_break_even {
                                 TradeResult::BreakEven
                             } else {
@@ -137,7 +203,7 @@ impl MacroSoup {
                     if p.tp < actual.high {
                         return Some(Trade::from_position(
                             p,
-                            actual.open_time.timestamp(),
+                            actual.open_time,
                             TradeResult::Winner,
                         ));
                     }
@@ -161,7 +227,8 @@ impl TradingModel for MacroSoup {
         let mut last_candle_in_session = false;
 
         for actual in self.candles.clone() {
-            if in_session(&self.session, actual.open_time) {
+            if in_session(&self.session, to_new_york_time(actual.open_time)) {
+                // println!("=======in {}", actual.open_time);
                 match session_low {
                     Some(s) => {
                         if s > actual.low {
@@ -192,12 +259,13 @@ impl TradingModel for MacroSoup {
                     session_high.unwrap(),
                     session_low.unwrap(),
                     self.max_duration_min,
+                    self.sl_strategy,
                 ) {
                     if position.rr().0 >= self.rr_threshold {
                         let c = self.candles.clone();
                         let candles_after_entry = c
                             .iter()
-                            .skip_while(|x| x.open_time.timestamp() <= position.open_time)
+                            .skip_while(|x| x.open_time <= position.open_time)
                             .collect_vec();
                         let trade =
                             Self::run_trade(position, candles_after_entry, self.be_threshold);
@@ -212,7 +280,10 @@ impl TradingModel for MacroSoup {
             }
         }
 
-        BacktestResult { trades }
+        BacktestResult {
+            trades,
+            capital: Decimal::from(1000),
+        }
     }
 }
 
@@ -228,9 +299,10 @@ mod tests {
         parse_datetime(date_time).unwrap()
     }
 
-    fn candlestick(duration: i64, open: i32, high: i32, low: i32, close: i32) -> CandleNY {
-        CandleNY {
-            open_time: date("2022-09-30 08:50:00") + Duration::minutes(duration),
+    fn candlestick(duration: i64, open: i32, high: i32, low: i32, close: i32) -> CandleStick {
+        CandleStick {
+            open_time: (date("2022-09-30 08:50:00").timestamp() + duration * 60),
+            close_time: (date("2022-09-30 08:50:59").timestamp() + duration * 60),
             open: DecimalVec(Decimal::from(open)),
             high: DecimalVec(Decimal::from(high)),
             low: DecimalVec(Decimal::from(low)),
@@ -243,8 +315,14 @@ mod tests {
         static ref SESSION_LOW: DecimalVec = DecimalVec(Decimal::from(60));
     }
 
-    fn trigger(candles: Vec<&CandleNY>) -> Option<Position> {
-        MacroSoup::trigger_or_invalidation(candles, *SESSION_HIGH, *SESSION_LOW, 4)
+    fn trigger(candles: Vec<&CandleStick>) -> Option<Position> {
+        MacroSoup::trigger_or_invalidation(
+            candles,
+            *SESSION_HIGH,
+            *SESSION_LOW,
+            4,
+            SlStrategy::None,
+        )
     }
 
     #[test]

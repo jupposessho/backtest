@@ -7,12 +7,12 @@ use super::{position::Position, position_direction::PositionDirection, trade_res
 
 #[derive(Clone, Copy)]
 pub struct Trade {
-    direction: PositionDirection,
-    open_time: i64,
-    close_time: i64,
-    entry: DecimalVec,
-    sl: DecimalVec,
-    tp: DecimalVec,
+    pub direction: PositionDirection,
+    pub open_time: i64,
+    pub close_time: i64,
+    pub entry: DecimalVec,
+    pub sl: DecimalVec,
+    pub tp: DecimalVec,
     pub result: TradeResult,
 }
 
@@ -21,6 +21,21 @@ impl Trade {
         match self.direction {
             PositionDirection::Short => (self.entry - self.tp) / (self.sl - self.entry),
             PositionDirection::Long => (self.tp - self.entry) / (self.entry - self.sl),
+        }
+    }
+
+    pub fn points(&self) -> DecimalVec {
+        match self.direction {
+            PositionDirection::Short => match self.result {
+                TradeResult::Winner => self.entry - self.tp,
+                TradeResult::Expense => self.entry - self.sl,
+                TradeResult::BreakEven => DecimalVec::new(0),
+            },
+            PositionDirection::Long => match self.result {
+                TradeResult::Winner => self.tp - self.entry,
+                TradeResult::Expense => self.sl - self.entry,
+                TradeResult::BreakEven => DecimalVec::new(0),
+            },
         }
     }
 }
