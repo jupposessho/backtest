@@ -7,12 +7,12 @@ use super::{position::Position, position_direction::PositionDirection, trade_res
 
 #[derive(Clone, Copy)]
 pub struct Trade {
-    direction: PositionDirection,
-    open_time: i64,
-    close_time: i64,
-    entry: DecimalVec,
-    sl: DecimalVec,
-    tp: DecimalVec,
+    pub direction: PositionDirection,
+    pub open_time: i64,
+    pub close_time: i64,
+    pub entry: DecimalVec,
+    pub sl: DecimalVec,
+    pub tp: DecimalVec,
     pub result: TradeResult,
 }
 

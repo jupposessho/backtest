@@ -1,91 +1,85 @@
 extern crate rust_decimal;
+
 use charming::{
     component::{
-        Axis, Brush, BrushType, DataZoom, DataZoomType, Feature, Grid, Legend, Toolbox,
-        ToolboxDataZoom,
+        Axis, DataZoom, DataZoomType, Feature, Grid, Legend, Toolbox, ToolboxDataZoom,
     },
     element::{
         AxisLine, AxisPointer, AxisPointerLink, AxisPointerType, AxisType, SplitArea, SplitLine,
         Tooltip, Trigger,
     },
-    series::Candlestick,
+    series::{Candlestick, Scatter},
     Chart,
 };
-use rust_decimal::Decimal;
+use charming::datatype::NumericValue;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 
 use crate::{
     candle_stick_loader::CandleStickLoader,
-    model::{candle_stick::CandleStick, sl_trategy::SlStrategy},
-};
-use crate::{
     execute,
-    model::{decimal::DecimalVec, session::Session},
-    parse_datetime,
-    strategies::macro_soup::MacroSoup,
+    model::{candle_stick::CandleStick, trade::Trade},
+    strategies::mc::{EntryMode, FvgConfig, LevelFilters, Mc, McConfig, McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrendFilter},
     to_new_york_time,
 };
 
-fn load_csv() -> Vec<CandleStick> {
-    //     CandleStickLoader::load_binance(include_str!(
-    //         "../assets/binance_BTC_1m_2024-08-16-2025-03-01.json"
-    //     ))
-    CandleStickLoader::load_bar_chart(
-        "/Users/jupposessho/develop/play/rust/backtest/assets/es1m_sample.json",
-    )
-    .unwrap()
-    // CandleStickLoader::load(include_str!("../assets/bitget_BTCUSDT_1m.json"))
-    // CandleStickLoader::load_csv(
-    //     "/Users/jupposessho/develop/play/rust/backtest/assets/NDX_full_1min.txt",
-    // )
-    // .unwrap()
+fn load_binance() -> Vec<CandleStick> {
+    CandleStickLoader::load_binance(include_str!(
+        "../assets/binance_BTCUSDT_15m.json"
+    ))
 }
 
-// fn round_to_near
-pub fn chart() -> Chart {
-    // let candlesticks = load_data();
+fn recent_candles(candles: &[CandleStick], days: i64) -> Vec<CandleStick> {
+    if candles.is_empty() {
+        return vec![];
+    }
+    let last_close_time = candles.last().unwrap().close_time;
+    let cutoff = last_close_time - (days * 24 * 60 * 60);
+    candles
+        .iter()
+        .copied()
+        .filter(|c| c.open_time >= cutoff)
+        .collect()
+}
 
-    // let category_data = candlesticks
-    //     .iter()
-    //     .map(|x| {
-    //         to_new_york_time(x.open_time)
-    //             .format("%Y-%m-%d %H:%M:%S")
-    //             .to_string()
-    //     })
-    //     .collect::<Vec<_>>();
-    // let data = candlesticks
-    //     .iter()
-    //     .enumerate()
-    //     .map(|(_, v)| {
-    //         let item = v.clone();
-    //         vec![item.open, item.close, item.low, item.high]
-    //     })
-    //     .collect::<Vec<_>>();
+fn find_candle_index(candles: &[CandleStick], timestamp: i64) -> Option<usize> {
+    candles
+        .iter()
+        .position(|c| c.open_time <= timestamp && c.close_time >= timestamp)
+        .or_else(|| candles.iter().position(|c| c.open_time >= timestamp))
+}
 
-    // //// SFP 15
-
-    // let sfp = Sfp {
-    //     rr_treshold: Decimal::from(2),
-    //     data: candlesticks,
-    // };
-    // let result = execute(sfp);
-    // println!("============result {:#?}", result);
-
-    let candlesticks = load_csv();
-
-    let sfp = MacroSoup {
-        candles: candlesticks.clone(),
-        rr_threshold: Decimal::from(3),
-        be_threshold: Some(DecimalVec::new(2)),
-        session: Session {
-            start: parse_datetime("2022-09-30 09:50:00").unwrap().time(),
-            end: parse_datetime("2022-09-30 10:10:00").unwrap().time(),
+fn mc_trades(data: Vec<CandleStick>) -> Vec<Trade> {
+    let config = McConfig {
+        mode: McMode::ContinuationEma200,
+        entry_mode: EntryMode::PrevOpen,
+        rr_target: rust_decimal::Decimal::from_f32(1.5).unwrap(),
+        trade_window: Some(TimeWindow::default()),
+        level_filters: LevelFilters {
+            enabled: false,
+            ..LevelFilters::default()
         },
-        sl_strategy: SlStrategy::None,
-        max_duration_min: 30,
+        trend_filter: TrendFilter::Ema { fast: 50, slow: 200 },
+        fvg_filter: FvgConfig {
+            enabled: false,
+            ..FvgConfig::default()
+        },
+        daily_open_time: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
+        prev_open_fill_window_candles: 3,
+        pattern: SignalPattern::Mc,
+        trailing_stop: TrailingStopConfig::default(),
     };
-    let result = execute(sfp);
-    println!("============result {:#?}", result);
-    let category_data = candlesticks
+
+    let model = Mc { data, config };
+    let result = execute(model);
+    result.trades
+}
+
+pub fn chart() -> Chart {
+    let all_candles = load_binance();
+    let candles = recent_candles(&all_candles, 90);
+    let trades = mc_trades(all_candles);
+
+    let category_data = candles
         .iter()
         .map(|x| {
             to_new_york_time(x.open_time)
@@ -93,21 +87,45 @@ pub fn chart() -> Chart {
                 .to_string()
         })
         .collect::<Vec<_>>();
-    let data = candlesticks
+
+    let data = candles
         .iter()
-        .enumerate()
-        .map(|(_, v)| {
-            let item = v.clone();
-            vec![item.open, item.close, item.low, item.high]
-        })
+        .map(|v| vec![v.open, v.close, v.low, v.high])
         .collect::<Vec<_>>();
+
+    let mut entry_points: Vec<Vec<NumericValue>> = vec![];
+    let mut exit_points: Vec<Vec<NumericValue>> = vec![];
+
+    for t in trades.iter() {
+        if let Some(entry_idx) = find_candle_index(&candles, t.open_time) {
+            if let Some(price) = t.entry.0.to_f64() {
+                entry_points.push(vec![
+                    NumericValue::Float(entry_idx as f64),
+                    NumericValue::Float(price),
+                ]);
+            }
+        }
+        if let Some(exit_idx) = find_candle_index(&candles, t.close_time) {
+            let exit_price = match t.result {
+                crate::model::trade_result::TradeResult::Winner => t.tp.0.to_f64(),
+                crate::model::trade_result::TradeResult::Expense => t.sl.0.to_f64(),
+                crate::model::trade_result::TradeResult::BreakEven => t.entry.0.to_f64(),
+            };
+            if let Some(price) = exit_price {
+                exit_points.push(vec![
+                    NumericValue::Float(exit_idx as f64),
+                    NumericValue::Float(price),
+                ]);
+            }
+        }
+    }
 
     Chart::new()
         .legend(
             Legend::new()
                 .bottom(10)
                 .left("center")
-                .data(vec!["Random chart"]),
+                .data(vec!["Candles", "Entries", "Exits"]),
         )
         .tooltip(
             Tooltip::new()
@@ -118,11 +136,10 @@ pub fn chart() -> Chart {
         .toolbox(
             Toolbox::new().feature(
                 Feature::new()
-                    .data_zoom(ToolboxDataZoom::new().y_axis_index("none"))
-                    .brush(Brush::new().type_(vec![BrushType::LineX, BrushType::Clear])),
+                    .data_zoom(ToolboxDataZoom::new().y_axis_index("none")),
             ),
         )
-        .grid(Grid::new().left("10%").right("8%").bottom(150))
+        .grid(Grid::new().left("10%").right("8%").bottom(120))
         .x_axis(
             Axis::new()
                 .type_(AxisType::Category)
@@ -151,9 +168,20 @@ pub fn chart() -> Chart {
                 .type_(DataZoomType::Slider)
                 .bottom(60)
                 .start(98)
-                .start(98)
                 .end(100)
                 .min_value_span(10),
         )
-        .series(Candlestick::new().data(data.clone()))
+        .series(Candlestick::new().name("Candles").data(data))
+        .series(
+            Scatter::new()
+                .name("Entries")
+                .data(entry_points)
+                .symbol_size(8),
+        )
+        .series(
+            Scatter::new()
+                .name("Exits")
+                .data(exit_points)
+                .symbol_size(8),
+        )
 }

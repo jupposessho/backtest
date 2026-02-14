@@ -17,7 +17,7 @@ use rust_decimal::Decimal;
 fn load_binance() -> Vec<CandleStick> {
     CandleStickLoader::load_binance(include_str!(
         // "../assets/binance_BTC_1m_2017-08-17-2024-08-16.json"
-        "../assets/binance_BTC_1m_2024-08-16-2025-03-01.json" // "../assets/binance_BTC_5m_2024-08-16-2025-03-01.json"
+        "../assets/binance_BTCUSDT_15m.json" // "../assets/binance_BTC_5m_2024-08-16-2025-03-01.json"
     ))
     // CandleStickLoader::load_binance(include_str!("../assets/BTCUSDT_1m.json"))
 }
@@ -33,7 +33,7 @@ fn main() {
     let last = parse_datetime("2022-09-30 18:00:00").unwrap().time();
     while start < last {
         let session_end = start + chrono::Duration::minutes(60);
-        let sfp = MacroSoup {
+        let trading_model = MacroSoup {
             candles: candlesticks.clone(),
             rr_threshold: Decimal::from(3),
             be_threshold: Some(DecimalVec::new(2)),
@@ -46,7 +46,7 @@ fn main() {
             // sl_strategy: SlStrategy::Limit(DecimalVec::new(500)),
             max_duration_min: 120,
         };
-        let result: BacktestResult = execute(sfp);
+        let result: BacktestResult = execute(trading_model);
 
         match best_result {
             Some(ref c) => {

@@ -47,6 +47,14 @@ path = "src/loader_binance.rs"
 name = "ms"
 path = "src/ms.rs"
 
+[[bin]]
+name = "mc"
+path = "src/mc.rs"
+
+[[bin]]
+name = "mc_summary"
+path = "src/mc_summary.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"
