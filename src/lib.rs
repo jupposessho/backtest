@@ -8,6 +8,7 @@ use std::error::Error;
 
 pub mod candle_stick_loader;
 pub mod chart;
+pub mod engine;
 pub mod model;
 pub mod strategies;
 

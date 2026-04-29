@@ -18,7 +18,10 @@ use crate::{
     candle_stick_loader::CandleStickLoader,
     execute,
     model::{candle_stick::CandleStick, trade::Trade},
-    strategies::mc::{EntryMode, FvgConfig, LevelFilters, Mc, McConfig, McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrendFilter},
+    strategies::mc::{
+        EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig,
+        McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrendFilter,
+    },
     to_new_york_time,
 };
 
@@ -67,6 +70,10 @@ fn mc_trades(data: Vec<CandleStick>) -> Vec<Trade> {
         prev_open_fill_window_candles: 3,
         pattern: SignalPattern::Mc,
         trailing_stop: TrailingStopConfig::default(),
+        execution: ExecutionConfig {
+            market_entry: MarketEntryMode::NextBarOpen,
+            ..ExecutionConfig::default()
+        },
     };
 
     let model = Mc { data, config };

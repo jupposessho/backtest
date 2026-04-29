@@ -8,6 +8,7 @@ use crate::model::{
     position_direction::PositionDirection, session::Session, trade::Trade,
     trade_result::TradeResult, trigger_type::TriggerType,
 };
+use crate::engine::types::{apply_entry_slippage, apply_exit_slippage, ExecutionConfig};
 
 pub fn is_swing_low(actual: CandleStick, previous: CandleStick, next: CandleStick) -> bool {
     actual.low < previous.low && actual.low < next.low
@@ -128,6 +129,7 @@ pub fn trigger_mayne(
     rr_threshold: Decimal,
     candles: Vec<CandleStick>,
     trades: &mut Vec<Trade>,
+    execution: &ExecutionConfig,
 ) {
     let trigger_candle =
         trigger_or_invalidation(candles.clone(), direction, trigger_level, sl, trigger_type);
@@ -135,7 +137,7 @@ pub fn trigger_mayne(
         let position = Position {
             direction,
             open_time: tc.close_time,
-            entry: tc.close,
+            entry: apply_entry_slippage(direction, tc.close, execution),
             sl, // TODO: can we refine this? eg: previous swing high on ltf
             tp,
             at_break_even: false,
@@ -146,7 +148,7 @@ pub fn trigger_mayne(
                 .iter()
                 .skip_while(|x| x.open_time <= tc.open_time)
                 .collect_vec();
-            let trade = run_trade(position, candles_after_entry);
+            let trade = run_trade(position, candles_after_entry, execution);
             if let Some(t) = trade {
                 trades.push(t)
             }
@@ -155,38 +157,50 @@ pub fn trigger_mayne(
 }
 // pub fn look_for_entry(candles: Vec<CandleStick>) {}
 
-pub fn run_trade(position: Position, candles: Vec<&CandleStick>) -> Option<Trade> {
+pub fn run_trade(position: Position, candles: Vec<&CandleStick>, execution: &ExecutionConfig) -> Option<Trade> {
     for actual in candles {
         match position.direction {
             PositionDirection::Short => {
                 if position.sl < actual.high {
-                    return Some(Trade::from_position(
+                    let exit = apply_exit_slippage(position.direction, position.sl, execution);
+                    return Some(Trade::from_position_with_exit(
                         position,
                         actual.close_time,
+                        exit,
                         TradeResult::Expense,
+                        execution,
                     ));
                 }
                 if position.tp > actual.low {
-                    return Some(Trade::from_position(
+                    let exit = apply_exit_slippage(position.direction, position.tp, execution);
+                    return Some(Trade::from_position_with_exit(
                         position,
                         actual.close_time,
+                        exit,
                         TradeResult::Winner,
+                        execution,
                     ));
                 }
             }
             PositionDirection::Long => {
                 if position.sl > actual.low {
-                    return Some(Trade::from_position(
+                    let exit = apply_exit_slippage(position.direction, position.sl, execution);
+                    return Some(Trade::from_position_with_exit(
                         position,
                         actual.close_time,
+                        exit,
                         TradeResult::Expense,
+                        execution,
                     ));
                 }
                 if position.tp < actual.high {
-                    return Some(Trade::from_position(
+                    let exit = apply_exit_slippage(position.direction, position.tp, execution);
+                    return Some(Trade::from_position_with_exit(
                         position,
                         actual.close_time,
+                        exit,
                         TradeResult::Winner,
+                        execution,
                     ));
                 }
             }

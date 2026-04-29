@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use rust_decimal::Decimal;
 
+use crate::engine::types::ExecutionConfig;
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -22,6 +23,7 @@ pub struct MacroSoup {
     pub max_duration_min: i64,
     pub be_threshold: Option<DecimalVec>,
     pub sl_strategy: SlStrategy,
+    pub execution: ExecutionConfig,
 }
 
 impl MacroSoup {
@@ -159,27 +161,42 @@ impl MacroSoup {
         position: Position,
         candles: Vec<&CandleStick>,
         be_threshold: Option<DecimalVec>,
+        execution: &ExecutionConfig,
     ) -> Option<Trade> {
         let mut p = position.clone();
         for actual in candles {
             match p.direction {
                 PositionDirection::Short => {
                     if p.sl < actual.high {
-                        return Some(Trade::from_position(
+                        let exit = crate::engine::types::apply_exit_slippage(
+                            p.direction,
+                            p.sl,
+                            execution,
+                        );
+                        return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
+                            exit,
                             if p.at_break_even {
                                 TradeResult::BreakEven
                             } else {
                                 TradeResult::Expense
                             },
+                            execution,
                         ));
                     }
                     if p.tp > actual.low {
-                        return Some(Trade::from_position(
+                        let exit = crate::engine::types::apply_exit_slippage(
+                            p.direction,
+                            p.tp,
+                            execution,
+                        );
+                        return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
+                            exit,
                             TradeResult::Winner,
+                            execution,
                         ));
                     }
                     if let Some(bet) = be_threshold {
@@ -190,21 +207,35 @@ impl MacroSoup {
                 }
                 PositionDirection::Long => {
                     if p.sl > actual.low {
-                        return Some(Trade::from_position(
+                        let exit = crate::engine::types::apply_exit_slippage(
+                            p.direction,
+                            p.sl,
+                            execution,
+                        );
+                        return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
+                            exit,
                             if p.at_break_even {
                                 TradeResult::BreakEven
                             } else {
                                 TradeResult::Expense
                             },
+                            execution,
                         ));
                     }
                     if p.tp < actual.high {
-                        return Some(Trade::from_position(
+                        let exit = crate::engine::types::apply_exit_slippage(
+                            p.direction,
+                            p.tp,
+                            execution,
+                        );
+                        return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
+                            exit,
                             TradeResult::Winner,
+                            execution,
                         ));
                     }
                     if let Some(bet) = be_threshold {
@@ -268,7 +299,7 @@ impl TradingModel for MacroSoup {
                             .skip_while(|x| x.open_time <= position.open_time)
                             .collect_vec();
                         let trade =
-                            Self::run_trade(position, candles_after_entry, self.be_threshold);
+                            Self::run_trade(position, candles_after_entry, self.be_threshold, &self.execution);
                         if let Some(t) = trade {
                             trades.push(t)
                         }

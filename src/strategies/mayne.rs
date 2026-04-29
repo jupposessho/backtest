@@ -1,5 +1,6 @@
 use rust_decimal::Decimal;
 
+use crate::engine::types::ExecutionConfig;
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::position_direction::PositionDirection;
@@ -17,6 +18,7 @@ pub struct Mayne {
     pub trigger_type: TriggerType,
     pub htf_data: Vec<CandleStick>,
     pub ltf_data: Vec<CandleStick>,
+    pub execution: ExecutionConfig,
 }
 
 impl TradingModel for Mayne {
@@ -62,6 +64,7 @@ impl TradingModel for Mayne {
                                 self.rr_threshold,
                                 next_candles,
                                 &mut trades,
+                                &self.execution,
                             );
                         }
                     }
@@ -90,6 +93,7 @@ impl TradingModel for Mayne {
                                 self.rr_threshold,
                                 next_candles,
                                 &mut trades,
+                                &self.execution,
                             );
                         }
                     }

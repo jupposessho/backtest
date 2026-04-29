@@ -1,7 +1,10 @@
 use std::fmt;
 
+use crate::engine::types::ExecutionConfig;
 use crate::model::decimal::DecimalVec;
 use crate::to_new_york_time;
+use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::Decimal;
 
 use super::{position::Position, position_direction::PositionDirection, trade_result::TradeResult};
 
@@ -14,6 +17,9 @@ pub struct Trade {
     pub sl: DecimalVec,
     pub tp: DecimalVec,
     pub result: TradeResult,
+    pub commission: Decimal,
+    pub slippage: Decimal,
+    pub fees: Decimal,
 }
 
 impl Trade {
@@ -38,6 +44,18 @@ impl Trade {
             },
         }
     }
+
+    pub fn total_costs(&self) -> Decimal {
+        self.commission + self.slippage + self.fees
+    }
+
+    pub fn gross_r(&self) -> Decimal {
+        match self.result {
+            TradeResult::Winner => self.rr().0,
+            TradeResult::Expense => Decimal::from(-1),
+            TradeResult::BreakEven => Decimal::ZERO,
+        }
+    }
 }
 
 impl fmt::Debug for Trade {
@@ -58,6 +76,9 @@ impl fmt::Debug for Trade {
             .field("tp", &self.tp.0)
             .field("rr", &self.rr().0)
             .field("result", &self.result)
+            .field("commission", &self.commission)
+            .field("slippage", &self.slippage)
+            .field("fees", &self.fees)
             .finish()
     }
 }
@@ -72,6 +93,37 @@ impl Trade {
             sl: position.sl,
             tp: position.tp,
             result,
+            commission: Decimal::ZERO,
+            slippage: Decimal::ZERO,
+            fees: Decimal::ZERO,
+        }
+    }
+
+    pub fn from_position_with_exit(
+        position: Position,
+        close_time: i64,
+        exit: DecimalVec,
+        result: TradeResult,
+        execution: &ExecutionConfig,
+    ) -> Trade {
+        let notional = (position.entry.0 + exit.0) / Decimal::from(2);
+        let commission = notional * execution.commission_rate_per_side * Decimal::from(2);
+        let fees = notional * execution.fee_rate_per_side * Decimal::from(2);
+        let slip = execution.tick_size
+            * Decimal::from_i32(execution.slippage_ticks_per_side).unwrap_or(Decimal::ZERO);
+        let slippage = slip.abs() * Decimal::from(2);
+
+        Trade {
+            direction: position.direction,
+            open_time: position.open_time,
+            close_time,
+            entry: position.entry,
+            sl: position.sl,
+            tp: exit,
+            result,
+            commission,
+            slippage,
+            fees,
         }
     }
 }

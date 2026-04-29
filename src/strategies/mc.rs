@@ -2,6 +2,12 @@ use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 
+use crate::engine::execution::run_setups;
+use crate::engine::entry_policies::resolve_entry_policy;
+use crate::engine::types::{
+    EntryModel, EntryPolicy, ExecutionConfig as EngineExecutionConfig, SetupCandidate, StopModel,
+    TargetModel, TrailingModel,
+};
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -30,6 +36,7 @@ pub struct McConfig {
     pub trend_filter: TrendFilter,
     pub fvg_filter: FvgConfig,
     pub daily_open_time: NaiveTime,
+    pub execution: ExecutionConfig,
 }
 
 impl Default for McConfig {
@@ -46,6 +53,34 @@ impl Default for McConfig {
             trend_filter: TrendFilter::None,
             fvg_filter: FvgConfig::default(),
             daily_open_time: NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
+            execution: ExecutionConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum MarketEntryMode {
+    SignalClose,
+    NextBarOpen,
+}
+
+#[derive(Clone)]
+pub struct ExecutionConfig {
+    pub market_entry: MarketEntryMode,
+    pub commission_rate_per_side: Decimal,
+    pub fee_rate_per_side: Decimal,
+    pub slippage_ticks_per_side: i32,
+    pub tick_size: Decimal,
+}
+
+impl Default for ExecutionConfig {
+    fn default() -> Self {
+        Self {
+            market_entry: MarketEntryMode::NextBarOpen,
+            commission_rate_per_side: Decimal::ZERO,
+            fee_rate_per_side: Decimal::ZERO,
+            slippage_ticks_per_side: 0,
+            tick_size: Decimal::from_f32(0.01).unwrap(),
         }
     }
 }
@@ -68,6 +103,8 @@ pub enum SignalPattern {
 pub enum EntryMode {
     Close,
     PrevOpen,
+    PairMidpoint,
+    PairExtreme,
 }
 
 #[derive(Clone)]
@@ -250,8 +287,14 @@ struct PendingLimit {
     direction: PositionDirection,
     entry: DecimalVec,
     sl: DecimalVec,
-    tp: DecimalVec,
     expires_at: usize,
+}
+
+#[derive(Clone, Copy)]
+struct PendingMarket {
+    direction: PositionDirection,
+    sl: DecimalVec,
+    signal_index: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -728,6 +771,11 @@ impl Mc {
         match entry_mode {
             EntryMode::Close => actual.close,
             EntryMode::PrevOpen => previous.open,
+            EntryMode::PairMidpoint => DecimalVec((actual.high.0 + actual.low.0) / Decimal::from(2)),
+            EntryMode::PairExtreme => match actual.close > previous.close {
+                true => actual.low,
+                false => actual.high,
+            },
         }
     }
 
@@ -741,23 +789,107 @@ impl Mc {
             other => (*other).clone(),
         }
     }
-}
 
-impl TradingModel for Mc {
-    fn execute(&self) -> BacktestResult {
-        let mut position: Option<ActivePosition> = None;
-        let mut trades: Vec<Trade> = vec![];
+    fn slip_value(execution: &ExecutionConfig) -> Decimal {
+        Decimal::from_i32(execution.slippage_ticks_per_side).unwrap_or(Decimal::ZERO)
+            * execution.tick_size
+    }
+
+    fn apply_entry_slippage(
+        direction: PositionDirection,
+        price: DecimalVec,
+        execution: &ExecutionConfig,
+    ) -> DecimalVec {
+        let slip = Self::slip_value(execution);
+        match direction {
+            PositionDirection::Long => DecimalVec(price.0 + slip),
+            PositionDirection::Short => DecimalVec(price.0 - slip),
+        }
+    }
+
+    fn apply_exit_slippage(
+        direction: PositionDirection,
+        price: DecimalVec,
+        execution: &ExecutionConfig,
+    ) -> DecimalVec {
+        let slip = Self::slip_value(execution);
+        match direction {
+            PositionDirection::Long => DecimalVec(price.0 - slip),
+            PositionDirection::Short => DecimalVec(price.0 + slip),
+        }
+    }
+
+    fn trade_costs(entry: DecimalVec, exit: DecimalVec, execution: &ExecutionConfig) -> (Decimal, Decimal, Decimal) {
+        let notional = (entry.0 + exit.0) / Decimal::from(2);
+        let commission = notional * execution.commission_rate_per_side * Decimal::from(2);
+        let fees = notional * execution.fee_rate_per_side * Decimal::from(2);
+        let slippage = Self::slip_value(execution).abs() * Decimal::from(2);
+        (commission, slippage, fees)
+    }
+
+    fn build_trade(
+        position: Position,
+        close_time: i64,
+        exit_price: DecimalVec,
+        result: TradeResult,
+        execution: &ExecutionConfig,
+    ) -> Trade {
+        let (commission, slippage, fees) = Self::trade_costs(position.entry, exit_price, execution);
+        Trade {
+            direction: position.direction,
+            open_time: position.open_time,
+            close_time,
+            entry: position.entry,
+            sl: position.sl,
+            tp: exit_price,
+            result,
+            commission,
+            slippage,
+            fees,
+        }
+    }
+
+    fn as_engine_execution(&self) -> EngineExecutionConfig {
+        EngineExecutionConfig {
+            commission_rate_per_side: self.config.execution.commission_rate_per_side,
+            fee_rate_per_side: self.config.execution.fee_rate_per_side,
+            slippage_ticks_per_side: self.config.execution.slippage_ticks_per_side,
+            tick_size: self.config.execution.tick_size,
+        }
+    }
+
+    fn trailing_model(&self) -> TrailingModel {
+        match self.config.trailing_stop.mode {
+            TrailingStopMode::None => TrailingModel::None,
+            TrailingStopMode::BreakEven1R => TrailingModel::BreakEvenAtR(Decimal::ONE),
+            TrailingStopMode::Trail05RAt15R => TrailingModel::StepAtR {
+                trigger_r: Decimal::from_f32(1.5).unwrap(),
+                lock_r: Decimal::from_f32(0.5).unwrap(),
+            },
+            TrailingStopMode::Trail1RAt2R => TrailingModel::StepAtR {
+                trigger_r: Decimal::from(2),
+                lock_r: Decimal::ONE,
+            },
+            TrailingStopMode::Progressive => TrailingModel::ProgressiveHalfR {
+                start_r: Decimal::ONE,
+                step_r: Decimal::from_f32(0.5).unwrap(),
+            },
+            TrailingStopMode::StepHalfR => TrailingModel::ProgressiveHalfR {
+                start_r: Decimal::ONE,
+                step_r: Decimal::from_f32(0.5).unwrap(),
+            },
+        }
+    }
+
+    fn detect_setups(&self) -> Vec<SetupCandidate> {
         let rr_target = self.config.rr_target;
+        let mut setups: Vec<SetupCandidate> = vec![];
 
         let mut day_tracker: PeriodRangeTracker<NaiveDate> = PeriodRangeTracker::new();
         let mut sweep_events: Vec<SweepEvent> = vec![];
-        let mut pending_limit: Option<PendingLimit> = None;
-
         let mut swing_lows: Vec<CandleStick> = vec![];
         let mut swing_highs: Vec<CandleStick> = vec![];
         let mut trend_state = TrendState::Neutral;
-
-        let mut ema_fast: Option<Decimal> = None;
         let mut ema_slow: Option<Decimal> = None;
 
         let mut fvg_zones: Vec<FvgZone> = vec![];
@@ -771,7 +903,7 @@ impl TradingModel for Mc {
 
         let mode = Self::mode_from_config(&self.config);
 
-        let mut ind = 0;
+        let mut ind = 0usize;
         while ind < self.data.len() {
             let actual = self.data[ind];
             let ny_dt = to_new_york_time(actual.open_time);
@@ -787,44 +919,32 @@ impl TradingModel for Mc {
                 trend_state = Self::trend_from_swings(&swing_lows, &swing_highs);
             }
 
-            match self.config.trend_filter {
-                TrendFilter::Ema { fast, slow } => {
-                    let close = actual.close.0;
-                    let fast_alpha =
-                        Decimal::from_i32(2).unwrap() / Decimal::from_i32((fast + 1) as i32).unwrap();
-                    let slow_alpha =
-                        Decimal::from_i32(2).unwrap() / Decimal::from_i32((slow + 1) as i32).unwrap();
-
-                    ema_fast = Some(match ema_fast {
-                        None => close,
-                        Some(prev) => fast_alpha * close + (Decimal::ONE - fast_alpha) * prev,
-                    });
-                    ema_slow = Some(match ema_slow {
-                        None => close,
-                        Some(prev) => slow_alpha * close + (Decimal::ONE - slow_alpha) * prev,
-                    });
-                }
-                _ => {}
+            if let TrendFilter::Ema { fast: _, slow } = self.config.trend_filter {
+                let close = actual.close.0;
+                let slow_alpha =
+                    Decimal::from_i32(2).unwrap() / Decimal::from_i32((slow + 1) as i32).unwrap();
+                ema_slow = Some(match ema_slow {
+                    None => close,
+                    Some(prev) => slow_alpha * close + (Decimal::ONE - slow_alpha) * prev,
+                });
             }
 
             if self.config.fvg_filter.enabled {
-                let touched_long = fvg_zones
+                if fvg_zones
                     .iter()
-                    .any(|z| z.direction == PositionDirection::Long && z.touched_by(actual));
-                let touched_short = fvg_zones
-                    .iter()
-                    .any(|z| z.direction == PositionDirection::Short && z.touched_by(actual));
-
-                if touched_long {
+                    .any(|z| z.direction == PositionDirection::Long && z.touched_by(actual))
+                {
                     last_fvg_touch_long = Some(ind);
                 }
-                if touched_short {
+                if fvg_zones
+                    .iter()
+                    .any(|z| z.direction == PositionDirection::Short && z.touched_by(actual))
+                {
                     last_fvg_touch_short = Some(ind);
                 }
             }
 
             sweep_events.retain(|e| e.expires_at >= ind);
-
             if self.config.level_filters.enabled {
                 if let Some(r) = day_tracker.prev_range {
                     if actual.high > r.high {
@@ -844,125 +964,8 @@ impl TradingModel for Mc {
                 }
             }
 
-            if let Some(pending) = pending_limit {
-                if ind > pending.expires_at {
-                    pending_limit = None;
-                } else if position.is_none()
-                    && actual.low <= pending.entry
-                    && actual.high >= pending.entry
-                {
-                    let initial_risk = match pending.direction {
-                        PositionDirection::Long => pending.entry.0 - pending.sl.0,
-                        PositionDirection::Short => pending.sl.0 - pending.entry.0,
-                    };
-                    position = Some(ActivePosition {
-                        position: Position {
-                            direction: pending.direction,
-                            open_time: actual.close_time,
-                            entry: pending.entry,
-                            sl: pending.sl,
-                            tp: pending.tp,
-                            at_break_even: false,
-                        },
-                        current_sl: pending.sl,
-                        initial_risk,
-                    });
-                    pending_limit = None;
-                }
-            }
-
-            if let Some(mut ap) = position {
-                Self::apply_trailing(&mut ap, actual, &self.config.trailing_stop);
-
-                match ap.position.direction {
-                    PositionDirection::Short => {
-                        if ap.current_sl < actual.high {
-                            if ap.current_sl == ap.position.entry {
-                                trades.push(Trade {
-                                    direction: ap.position.direction,
-                                    open_time: ap.position.open_time,
-                                    close_time: actual.close_time,
-                                    entry: ap.position.entry,
-                                    sl: ap.position.sl,
-                                    tp: ap.position.entry,
-                                    result: TradeResult::BreakEven,
-                                });
-                            } else if ap.current_sl < ap.position.entry {
-                                trades.push(Trade {
-                                    direction: ap.position.direction,
-                                    open_time: ap.position.open_time,
-                                    close_time: actual.close_time,
-                                    entry: ap.position.entry,
-                                    sl: ap.position.sl,
-                                    tp: ap.current_sl,
-                                    result: TradeResult::Winner,
-                                });
-                            } else {
-                                trades.push(Trade::from_position(
-                                    ap.position,
-                                    actual.close_time,
-                                    TradeResult::Expense,
-                                ));
-                            }
-                            position = None;
-                        } else if ap.position.tp > actual.low {
-                            trades.push(Trade::from_position(
-                                ap.position,
-                                actual.close_time,
-                                TradeResult::Winner,
-                            ));
-                            position = None;
-                        } else {
-                            position = Some(ap);
-                        }
-                    }
-                    PositionDirection::Long => {
-                        if ap.current_sl > actual.low {
-                            if ap.current_sl == ap.position.entry {
-                                trades.push(Trade {
-                                    direction: ap.position.direction,
-                                    open_time: ap.position.open_time,
-                                    close_time: actual.close_time,
-                                    entry: ap.position.entry,
-                                    sl: ap.position.sl,
-                                    tp: ap.position.entry,
-                                    result: TradeResult::BreakEven,
-                                });
-                            } else if ap.current_sl > ap.position.entry {
-                                trades.push(Trade {
-                                    direction: ap.position.direction,
-                                    open_time: ap.position.open_time,
-                                    close_time: actual.close_time,
-                                    entry: ap.position.entry,
-                                    sl: ap.position.sl,
-                                    tp: ap.current_sl,
-                                    result: TradeResult::Winner,
-                                });
-                            } else {
-                                trades.push(Trade::from_position(
-                                    ap.position,
-                                    actual.close_time,
-                                    TradeResult::Expense,
-                                ));
-                            }
-                            position = None;
-                        } else if ap.position.tp < actual.high {
-                            trades.push(Trade::from_position(
-                                ap.position,
-                                actual.close_time,
-                                TradeResult::Winner,
-                            ));
-                            position = None;
-                        } else {
-                            position = Some(ap);
-                        }
-                    }
-                }
-            }
-
-            if position.is_none() && ind > 0 {
+            if ind > 0 {
                 let previous = self.data[ind - 1];
-
                 let in_trade_window = self
                     .config
                     .trade_window
@@ -980,16 +983,14 @@ impl TradingModel for Mc {
                             fvg_ok = last_fvg_touch_long
                                 .map(|i_touch| {
                                     ind >= i_touch
-                                        && (ind - i_touch)
-                                            <= self.config.fvg_filter.touch_window_candles
+                                        && (ind - i_touch) <= self.config.fvg_filter.touch_window_candles
                                 })
                                 .unwrap_or(false);
                         } else if bearish_signal {
                             fvg_ok = last_fvg_touch_short
                                 .map(|i_touch| {
                                     ind >= i_touch
-                                        && (ind - i_touch)
-                                            <= self.config.fvg_filter.touch_window_candles
+                                        && (ind - i_touch) <= self.config.fvg_filter.touch_window_candles
                                 })
                                 .unwrap_or(false);
                         }
@@ -999,13 +1000,11 @@ impl TradingModel for Mc {
                         McMode::ReversalDaily => {
                             if bullish_signal {
                                 sweep_events.iter().any(|e| {
-                                    e.direction == PositionDirection::Long
-                                        && e.range.contains(actual.close)
+                                    e.direction == PositionDirection::Long && e.range.contains(actual.close)
                                 })
                             } else if bearish_signal {
                                 sweep_events.iter().any(|e| {
-                                    e.direction == PositionDirection::Short
-                                        && e.range.contains(actual.close)
+                                    e.direction == PositionDirection::Short && e.range.contains(actual.close)
                                 })
                             } else {
                                 false
@@ -1028,116 +1027,107 @@ impl TradingModel for Mc {
                                 false
                             }
                         }
-                        McMode::ContinuationStructure => {
-                            // Allow trades when trend matches signal OR trend is neutral
-                            match trend_state {
-                                TrendState::Up => bullish_signal,
-                                TrendState::Down => bearish_signal,
-                                TrendState::Neutral => bullish_signal || bearish_signal,
-                            }
+                        McMode::ContinuationStructure => match trend_state {
+                            TrendState::Up => bullish_signal,
+                            TrendState::Down => bearish_signal,
+                            TrendState::Neutral => bullish_signal || bearish_signal,
                         },
                         McMode::ReversalDaily => true,
                         McMode::Auto => true,
                     };
 
                     if level_ok && fvg_ok && trend_ok {
-                        match self.config.entry_mode {
-                            EntryMode::Close => {
-                                if bullish_signal {
-                                    let entry =
-                                        Self::entry_price(&self.config.entry_mode, actual, previous);
-                                    let mut p = Position {
-                                        direction: PositionDirection::Long,
-                                        open_time: actual.close_time,
-                                        entry,
-                                        sl: actual.low,
-                                        tp: DecimalVec::new(0),
-                                        at_break_even: false,
-                                    };
-                                    if let Some(tp) = Self::target_price(&p, rr_target) {
-                                        p.tp = tp;
-                                        let initial_risk = Self::risk_amount(&p);
-                                        position = Some(ActivePosition {
-                                            position: p,
-                                            current_sl: p.sl,
-                                            initial_risk,
-                                        });
-                                    }
-                                } else if bearish_signal {
-                                    let entry =
-                                        Self::entry_price(&self.config.entry_mode, actual, previous);
-                                    let mut p = Position {
-                                        direction: PositionDirection::Short,
-                                        open_time: actual.close_time,
-                                        entry,
-                                        sl: actual.high,
-                                        tp: DecimalVec::new(0),
-                                        at_break_even: false,
-                                    };
-                                    if let Some(tp) = Self::target_price(&p, rr_target) {
-                                        p.tp = tp;
-                                        let initial_risk = Self::risk_amount(&p);
-                                        position = Some(ActivePosition {
-                                            position: p,
-                                            current_sl: p.sl,
-                                            initial_risk,
-                                        });
-                                    }
-                                }
+                        if bullish_signal {
+                            if let Some(setup) = self.build_setup(
+                                PositionDirection::Long,
+                                ind,
+                                actual,
+                                previous,
+                                rr_target,
+                            ) {
+                                setups.push(setup);
                             }
-                            EntryMode::PrevOpen => {
-                                if pending_limit.is_none() {
-                                    if bullish_signal {
-                                        let entry = previous.open;
-                                        let temp = Position {
-                                            direction: PositionDirection::Long,
-                                            open_time: actual.close_time,
-                                            entry,
-                                            sl: actual.low,
-                                            tp: DecimalVec::new(0),
-                                            at_break_even: false,
-                                        };
-                                        if let Some(tp) = Self::target_price(&temp, rr_target) {
-                                            pending_limit = Some(PendingLimit {
-                                                direction: PositionDirection::Long,
-                                                entry,
-                                                sl: actual.low,
-                                                tp,
-                                                expires_at: ind
-                                                    + self.config.prev_open_fill_window_candles,
-                                            });
-                                        }
-                                    } else if bearish_signal {
-                                        let entry = previous.open;
-                                        let temp = Position {
-                                            direction: PositionDirection::Short,
-                                            open_time: actual.close_time,
-                                            entry,
-                                            sl: actual.high,
-                                            tp: DecimalVec::new(0),
-                                            at_break_even: false,
-                                        };
-                                        if let Some(tp) = Self::target_price(&temp, rr_target) {
-                                            pending_limit = Some(PendingLimit {
-                                                direction: PositionDirection::Short,
-                                                entry,
-                                                sl: actual.high,
-                                                tp,
-                                                expires_at: ind
-                                                    + self.config.prev_open_fill_window_candles,
-                                            });
-                                        }
-                                    }
-                                }
+                        } else if bearish_signal {
+                            if let Some(setup) = self.build_setup(
+                                PositionDirection::Short,
+                                ind,
+                                actual,
+                                previous,
+                                rr_target,
+                            ) {
+                                setups.push(setup);
                             }
                         }
                     }
                 }
             }
-
             ind += 1;
         }
+        setups
+    }
 
+    fn build_setup(
+        &self,
+        direction: PositionDirection,
+        ind: usize,
+        actual: CandleStick,
+        previous: CandleStick,
+        rr_target: Decimal,
+    ) -> Option<SetupCandidate> {
+        let sl = match direction {
+            PositionDirection::Long => actual.low,
+            PositionDirection::Short => actual.high,
+        };
+
+        let entry_model = match self.config.entry_mode {
+            EntryMode::Close => match self.config.execution.market_entry {
+                MarketEntryMode::SignalClose => EntryModel::SignalClose,
+                MarketEntryMode::NextBarOpen => EntryModel::NextBarOpen,
+            },
+            EntryMode::PrevOpen => EntryModel::LimitByPolicy {
+                policy: EntryPolicy::ObPrevOpen,
+                expiry_bars: self.config.prev_open_fill_window_candles,
+            },
+            EntryMode::PairMidpoint => EntryModel::LimitByPolicy {
+                policy: EntryPolicy::ObPairMidpoint,
+                expiry_bars: self.config.prev_open_fill_window_candles,
+            },
+            EntryMode::PairExtreme => EntryModel::LimitByPolicy {
+                policy: EntryPolicy::ObPairExtreme,
+                expiry_bars: self.config.prev_open_fill_window_candles,
+            },
+        };
+
+        let probe_entry = match entry_model {
+            EntryModel::SignalClose => actual.close,
+            EntryModel::NextBarOpen => actual.close,
+            EntryModel::LimitTouch { price, .. } => price,
+            EntryModel::LimitByPolicy { policy, .. } => resolve_entry_policy(policy, direction, actual, previous),
+        };
+        let risk = match direction {
+            PositionDirection::Long => probe_entry.0 - sl.0,
+            PositionDirection::Short => sl.0 - probe_entry.0,
+        };
+        if risk <= Decimal::ZERO {
+            return None;
+        }
+
+        Some(SetupCandidate {
+            direction,
+            signal_index: ind,
+            entry: entry_model,
+            stop: StopModel::FixedPrice(sl),
+            target: TargetModel::FixedR(rr_target),
+            trailing: self.trailing_model(),
+        })
+    }
+}
+
+impl TradingModel for Mc {
+    fn execute(&self) -> BacktestResult {
+        let setups = self.detect_setups();
+        let exec_cfg = self.as_engine_execution();
+        let trades = run_setups(&self.data, &setups, &exec_cfg);
         BacktestResult {
             trades,
             capital: Decimal::from(1000),

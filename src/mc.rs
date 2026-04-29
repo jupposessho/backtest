@@ -9,8 +9,8 @@ use backtest::{
     execute,
     model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
     strategies::mc::{
-        EntryMode, FvgConfig, LevelFilters, Mc, McConfig, McMode, SignalPattern, TimeWindow,
-        TrailingStopConfig, TrendFilter,
+        EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig,
+        McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrendFilter,
     },
 };
 
@@ -61,6 +61,7 @@ struct Stats {
     max_drawdown_pct: Decimal,
     profit_factor: Decimal,
     final_balance: Decimal,
+    total_costs: Decimal,
 }
 
 fn compute_stats(label: &'static str, result: &BacktestResult) -> Stats {
@@ -96,6 +97,7 @@ fn compute_stats(label: &'static str, result: &BacktestResult) -> Stats {
     } else {
         Decimal::ZERO
     };
+    let total_costs = trades.iter().map(|t| t.total_costs()).sum::<Decimal>().trunc_with_scale(2);
 
     Stats {
         label,
@@ -107,6 +109,7 @@ fn compute_stats(label: &'static str, result: &BacktestResult) -> Stats {
         max_drawdown_pct,
         profit_factor,
         final_balance,
+        total_costs,
     }
 }
 
@@ -122,11 +125,7 @@ fn equity_metrics(
     let mut gross_loss = Decimal::ZERO;
 
     for t in trades {
-        let change = match t.result {
-            TradeResult::Winner => capital * r * t.rr().0.trunc_with_scale(2),
-            TradeResult::Expense => -capital * r,
-            TradeResult::BreakEven => Decimal::ZERO,
-        };
+        let change = capital * r * t.gross_r().trunc_with_scale(4) - t.total_costs();
 
         if change > Decimal::ZERO {
             gross_profit += change;
@@ -180,6 +179,13 @@ fn config_with(
         },
         daily_open_time: NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         trailing_stop,
+        execution: ExecutionConfig {
+            market_entry: MarketEntryMode::NextBarOpen,
+            commission_rate_per_side: Decimal::from_f32(0.001).unwrap(),
+            fee_rate_per_side: Decimal::ZERO,
+            slippage_ticks_per_side: 1,
+            tick_size: Decimal::from_f32(0.01).unwrap(),
+        },
     }
 }
 
@@ -615,8 +621,8 @@ fn main() {
 fn run_all_cases(tf_name: &str, candlesticks: &Vec<CandleStick>, test_cases: &Vec<(&'static str, McConfig)>) {
     println!("\n=== BASELINE (No Trailing Stops) ===");
     println!(
-        "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12}",
-        "case", "trades", "win_rate", "wins", "losses", "b/e", "max_dd%", "profit_factor", "balance"
+        "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12} {:>12}",
+        "case", "trades", "win_rate", "wins", "losses", "b/e", "max_dd%", "profit_factor", "balance", "costs"
     );
 
     for (i, (label, cfg)) in test_cases.iter().enumerate() {
@@ -624,8 +630,8 @@ fn run_all_cases(tf_name: &str, candlesticks: &Vec<CandleStick>, test_cases: &Ve
         if i == 16 {
             println!("\n=== TRAILING STOP VARIANTS ===");
             println!(
-                "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12}",
-                "case", "trades", "win_rate", "wins", "losses", "b/e", "max_dd%", "profit_factor", "balance"
+                "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12} {:>12}",
+                "case", "trades", "win_rate", "wins", "losses", "b/e", "max_dd%", "profit_factor", "balance", "costs"
             );
         } else if i == 20 {
             println!("\n--- Continuation EMA200 Trailing Variants ---");
@@ -637,7 +643,7 @@ fn run_all_cases(tf_name: &str, candlesticks: &Vec<CandleStick>, test_cases: &Ve
 
         let stats = run_case(label, &candlesticks, cfg.clone());
         println!(
-            "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12.2}",
+            "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12.2} {:>12.2}",
             stats.label,
             stats.trades,
             stats.win_rate,
@@ -646,7 +652,8 @@ fn run_all_cases(tf_name: &str, candlesticks: &Vec<CandleStick>, test_cases: &Ve
             stats.break_evens,
             stats.max_drawdown_pct,
             stats.profit_factor,
-            stats.final_balance
+            stats.final_balance,
+            stats.total_costs
         );
     }
 }

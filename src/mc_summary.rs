@@ -9,8 +9,8 @@ use backtest::{
     execute,
     model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
     strategies::mc::{
-        EntryMode, FvgConfig, LevelFilters, Mc, McConfig, McMode, SignalPattern, TimeWindow,
-        TrailingStopConfig, TrendFilter, TrailingStopMode,
+        EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig,
+        McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrailingStopMode, TrendFilter,
     },
 };
 
@@ -62,6 +62,7 @@ struct Stats {
     max_drawdown_pct: Decimal,
     profit_factor: Decimal,
     final_balance: Decimal,
+    total_costs: Decimal,
 }
 
 fn compute_stats(label: String, timeframe: String, result: &BacktestResult) -> Stats {
@@ -97,6 +98,7 @@ fn compute_stats(label: String, timeframe: String, result: &BacktestResult) -> S
     } else {
         Decimal::ZERO
     };
+    let total_costs = trades.iter().map(|t| t.total_costs()).sum::<Decimal>().trunc_with_scale(2);
 
     Stats {
         label,
@@ -109,6 +111,7 @@ fn compute_stats(label: String, timeframe: String, result: &BacktestResult) -> S
         max_drawdown_pct,
         profit_factor,
         final_balance,
+        total_costs,
     }
 }
 
@@ -124,11 +127,7 @@ fn equity_metrics(
     let mut gross_loss = Decimal::ZERO;
 
     for t in trades {
-        let change = match t.result {
-            TradeResult::Winner => capital * r * t.rr().0.trunc_with_scale(2),
-            TradeResult::Expense => -capital * r,
-            TradeResult::BreakEven => Decimal::ZERO,
-        };
+        let change = capital * r * t.gross_r().trunc_with_scale(4) - t.total_costs();
 
         if change > Decimal::ZERO {
             gross_profit += change;
@@ -183,6 +182,13 @@ fn config_with(
         trailing_stop: TrailingStopConfig {
             mode: TrailingStopMode::None,
         },
+        execution: ExecutionConfig {
+            market_entry: MarketEntryMode::NextBarOpen,
+            commission_rate_per_side: Decimal::from_f32(0.001).unwrap(),
+            fee_rate_per_side: Decimal::ZERO,
+            slippage_ticks_per_side: 1,
+            tick_size: Decimal::from_f32(0.01).unwrap(),
+        },
     }
 }
 
@@ -233,8 +239,8 @@ fn main() {
         println!("║  TIMEFRAME: {:^68} ║", tf_name);
         println!("╚═══════════════════════════════════════════════════════════════════════════════╝\n");
 
-        println!("{:<35} {:>7} {:>10} {:>8} {:>12} {:>13} {:>12}",
-            "strategy", "trades", "win_rate", "max_dd%", "profit_factor", "balance", "gain"
+        println!("{:<35} {:>7} {:>10} {:>8} {:>12} {:>13} {:>12} {:>12}",
+            "strategy", "trades", "win_rate", "max_dd%", "profit_factor", "balance", "gain", "costs"
         );
         println!("{}", "-".repeat(100));
 
@@ -244,14 +250,15 @@ fn main() {
 
             let gain_x = (stats.final_balance / Decimal::from(1000)).trunc_with_scale(2);
 
-            println!("{:<35} {:>7} {:>10} {:>8} {:>13} {:>12.2} {:>11}x",
+            println!("{:<35} {:>7} {:>10} {:>8} {:>13} {:>12.2} {:>11}x {:>12.2}",
                 stats.label,
                 stats.trades,
                 stats.win_rate,
                 stats.max_drawdown_pct,
                 stats.profit_factor,
                 stats.final_balance,
-                gain_x
+                gain_x,
+                stats.total_costs
             );
 
             all_results.push(stats);

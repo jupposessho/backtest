@@ -1,6 +1,7 @@
 extern crate rust_decimal;
 use backtest::{
     candle_stick_loader::CandleStickLoader,
+    engine::types::ExecutionConfig,
     execute,
     model::{
         backtest_result::BacktestResult, candle_stick::CandleStick, decimal::DecimalVec,
@@ -45,6 +46,12 @@ fn main() {
             // sl_strategy: SlStrategy::Skip(DecimalVec::new(250)),
             // sl_strategy: SlStrategy::Limit(DecimalVec::new(500)),
             max_duration_min: 120,
+            execution: ExecutionConfig {
+                commission_rate_per_side: Decimal::new(1, 3),
+                fee_rate_per_side: Decimal::ZERO,
+                slippage_ticks_per_side: 1,
+                tick_size: Decimal::new(1, 2),
+            },
         };
         let result: BacktestResult = execute(trading_model);
 

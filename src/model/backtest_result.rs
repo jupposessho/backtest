@@ -27,13 +27,17 @@ impl BacktestResult {
             .trades
             .clone()
             .into_iter()
-            .map(|x| match x.result {
-                TradeResult::Winner => x.rr().0,
-                TradeResult::Expense => Decimal::from(-1),
-                TradeResult::BreakEven => Decimal::from(0),
-            })
+            .map(|x| x.gross_r())
             .sum();
         r.trunc_with_scale(2)
+    }
+
+    pub fn costs_total(&self) -> Decimal {
+        self.trades
+            .iter()
+            .map(|x| x.total_costs())
+            .sum::<Decimal>()
+            .trunc_with_scale(2)
     }
 
     pub fn profit_in_points(&self) -> Decimal {
@@ -47,10 +51,9 @@ impl BacktestResult {
             .trades
             .clone()
             .iter()
-            .fold(self.capital, |acc, &x| match x.result {
-                TradeResult::Winner => acc + acc * r * x.rr().0.trunc_with_scale(2),
-                TradeResult::Expense => acc - acc * r,
-                TradeResult::BreakEven => acc,
+            .fold(self.capital, |acc, &x| {
+                let gross_change = acc * r * x.gross_r().trunc_with_scale(4);
+                acc + gross_change - x.total_costs()
             });
         ((result - self.capital) / self.capital * Decimal::from(100)).trunc_with_scale(2)
     }

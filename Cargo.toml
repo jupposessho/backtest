@@ -30,6 +30,7 @@ dialoguer = "0.10"
 
 binance = { git = "https://github.com/wisespace-io/binance-rs.git" }
 lazy_static = "1.4"
+parquet = "53"
 
 [[bin]]
 name = "gallery"
@@ -54,6 +55,14 @@ path = "src/mc.rs"
 [[bin]]
 name = "mc_summary"
 path = "src/mc_summary.rs"
+
+[[bin]]
+name = "ict"
+path = "src/ict.rs"
+
+[[bin]]
+name = "data_probe"
+path = "src/data_probe.rs"
 
 #[[bin]]
 #name = "trade"
