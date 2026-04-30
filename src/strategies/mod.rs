@@ -1,4 +1,6 @@
 pub mod lib;
+pub mod ttrades_fractal;
+pub mod ttrades_fractal_mtf;
 pub mod ict_composed;
 pub mod macro_soup;
 pub mod mayne;

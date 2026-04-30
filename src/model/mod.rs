@@ -4,6 +4,7 @@ pub mod binance_klines_item;
 pub mod bitget_klines_item;
 pub mod candle_stick;
 pub mod decimal;
+pub mod fee_config;
 pub mod position;
 pub mod position_direction;
 pub mod session;

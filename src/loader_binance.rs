@@ -1,7 +1,6 @@
 use anyhow::Result;
 use backtest::model::binance_klines_item::BinanceKlinesItem;
 use clap::{Arg, Command};
-use dialoguer::Confirm;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -76,20 +75,7 @@ async fn main() -> Result<()> {
     // File path
     let file_path = assets_dir.join(format!("{}_{}_{}.json", exchange, symbol, interval));
 
-    // Check if file exists and prompt for overwrite
-    if file_path.exists() {
-        if !Confirm::new()
-            .with_prompt(format!(
-                "{} already exists. Do you want to overwrite it?",
-                file_path.display()
-            ))
-            .default(false)
-            .interact()?
-        {
-            println!("Operation cancelled. File not overwritten.");
-            return Ok(());
-        }
-    }
+    // Overwrite existing files non-interactively.
     let mut all_klines: Vec<BinanceKlinesItem> = Vec::new();
 
     loop {
@@ -116,7 +102,6 @@ async fn main() -> Result<()> {
             }
 
             for kline in klines {
-                println!("{:?}", kline);
                 start_time = kline.close_time;
                 all_klines.push(kline);
             }

@@ -39,3 +39,29 @@
 2. Add a `load_binance_XXm()` function with `include_str!` in the relevant binary
 3. Add to the `timeframes` vector in `main()`
 4. For a new strategy: implement `TradingModel` trait, add module to `src/strategies/mod.rs`
+
+## Sweep Performance Rules
+
+- Sweep runtime optimizations are currently implemented at the **runner/report layer** (for example `src/ttrades_matrix.rs`), not in the shared execution engine.
+- For expensive sweeps:
+  - load each dataset once,
+  - reuse immutable candles through `Arc<Vec<CandleStick>>`,
+  - run bounded parallel sweeps (cap workers, e.g. `min(available, 8)`).
+- Use a naive gate first (`fee=0`, `slippage=0`): if net <= 0 or PF < 1, skip deeper realism sweeps for that case.
+- Keep `--fast` mode in sweep binaries for iteration (lower bar cap and fewer slippage levels), then run full mode for final reports.
+
+## Reversal Sweep Defaults
+
+- For reversal-focused strategy research, always include a sweep across reversal confirmation families by default (without requiring explicit user reminders):
+  - CISD `BodyFlip`,
+  - CISD `StrictWickBreak` (wick breaks series closes),
+  - CISD `LastSeriesCloseBreak` (close breaks last opposite close),
+  - optional `iFVG` confirmation filter on/off,
+  - entry variants (`Close`, `ObLevel`, `ObMidpoint`) when available.
+- Treat this as baseline sweep coverage for reversal systems before concluding `PARTIALLY_TESTED`/`FULLY_TESTED`.
+
+## OpenCode Skill Bootstrap
+
+- Always load the installed skill `backtesting-implementation` at the start of any backtesting/model-validation task.
+- Use it as the default operating checklist for sweeps, promotion gates, reporting, and fast/full loop discipline.
+- Detailed reference guide path: `reports/strategy_overviews/BACKTESTING_IMPLEMENTATION_GUIDE.md`.

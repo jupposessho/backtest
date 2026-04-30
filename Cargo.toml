@@ -31,6 +31,7 @@ dialoguer = "0.10"
 binance = { git = "https://github.com/wisespace-io/binance-rs.git" }
 lazy_static = "1.4"
 parquet = "53"
+rayon = "1.10"
 
 [[bin]]
 name = "gallery"
@@ -63,6 +64,22 @@ path = "src/ict.rs"
 [[bin]]
 name = "data_probe"
 path = "src/data_probe.rs"
+
+[[bin]]
+name = "ttrades_fractal"
+path = "src/ttrades_fractal_runner.rs"
+
+[[bin]]
+name = "ttrades_fractal_mtf"
+path = "src/ttrades_fractal_mtf_runner.rs"
+
+[[bin]]
+name = "ttrades_matrix"
+path = "src/ttrades_matrix.rs"
+
+[[bin]]
+name = "ttrades_targeted_grid"
+path = "src/ttrades_targeted_grid.rs"
 
 #[[bin]]
 #name = "trade"

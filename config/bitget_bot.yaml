@@ -1,0 +1,63 @@
+# Bitget Fractal MTF Bot Configuration (BTC/ETH/SOL, 4h/5m)
+
+bot:
+  # Trading universe
+  assets:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+
+  # Strategy parameters
+  timeframes:
+    htf: 4H
+    ltf: 5m
+  rr_target: 2.0
+
+  # Risk & execution
+  risk_pct: 0.005       # 0.5% per trade
+  leverage: 10
+  margin_mode: isolated
+  order_type: market     # market | limit
+
+  # Limits / safety
+  max_total_drawdown_pct: 0.20
+
+  # Optional overrides if contract metadata fails
+  size_step: null        # e.g. 0.001
+  price_step: null       # e.g. 0.1
+
+exchange:
+  product_type: USDT-FUTURES
+  margin_coin: USDT
+  locale: en-US
+  demo: true
+  rest_base_url: https://api.bitget.com
+  ws_public_url_demo: wss://wspap.bitget.com/v2/ws/public
+  ws_public_url_live: wss://ws.bitget.com/v2/ws/public
+
+credentials:
+  # You can also keep these in env vars and leave them blank here.
+  api_key: ""
+  secret_key: ""
+  passphrase: ""
+
+logging:
+  # Trade logs
+  enable_csv: true
+  enable_json: true
+  log_dir: logs
+  include_raw_errors: true
+
+alerts:
+  # Console is always enabled
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+  discord:
+    enabled: false
+    webhook_url: ""
+
+pnl:
+  mode: exchange   # exchange | strategy
+  poll_interval_sec: 30

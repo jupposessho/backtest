@@ -136,11 +136,11 @@ impl CandleStickLoader {
 }
 
 fn normalize_epoch(ts: i64) -> i64 {
-    if ts > 10_000_000_000 {
-        ts / 1000
-    } else {
-        ts
+    let mut out = ts;
+    while out > 10_000_000_000 {
+        out /= 1000;
     }
+    out
 }
 
 fn find_decimal(row: &parquet::record::Row, names: &[&str]) -> Option<Decimal> {
