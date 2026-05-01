@@ -37,6 +37,12 @@ pub enum DojiTargetMode {
 }
 
 #[derive(Clone, Copy)]
+pub enum MaxSlMode {
+    MarketStopCap,
+    LimitReprice,
+}
+
+#[derive(Clone, Copy)]
 pub struct DojiConfig {
     pub doji_type: DojiType,
     pub body_pct_max: Decimal,
@@ -50,6 +56,7 @@ pub struct DojiConfig {
     pub entry_mode: DojiEntryMode,
     pub target_mode: DojiTargetMode,
     pub max_sl_points: Option<Decimal>,
+    pub max_sl_mode: MaxSlMode,
     pub execution: ExecutionConfig,
 }
 
@@ -68,6 +75,7 @@ impl Default for DojiConfig {
             entry_mode: DojiEntryMode::MidpointLimit,
             target_mode: DojiTargetMode::RunnerR(Decimal::from(100)),
             max_sl_points: None,
+            max_sl_mode: MaxSlMode::MarketStopCap,
             execution: ExecutionConfig::default(),
         }
     }
@@ -176,9 +184,13 @@ impl SetupDetector for DojiDetector {
         }
 
         let direction = self.detect_direction(lower_wick_pct, upper_wick_pct);
-        let mut entry_px = DecimalVec((c.open.0 + c.close.0) / Decimal::from(2));
+        let midpoint_entry = DecimalVec((c.open.0 + c.close.0) / Decimal::from(2));
+        let mut entry_px = match self.config.entry_mode {
+            DojiEntryMode::MidpointLimit => midpoint_entry,
+            DojiEntryMode::MarketClose => c.close,
+        };
         let buffer = Decimal::from(self.config.stop_buffer_ticks) * self.config.execution.tick_size;
-        let sl = match direction {
+        let mut sl = match direction {
             PositionDirection::Long => DecimalVec(c.low.0 - buffer),
             PositionDirection::Short => DecimalVec(c.high.0 + buffer),
         };
@@ -190,10 +202,20 @@ impl SetupDetector for DojiDetector {
 
         if let Some(max_sl) = self.config.max_sl_points {
             if initial_risk > max_sl {
-                entry_px = match direction {
-                    PositionDirection::Long => DecimalVec(sl.0 + max_sl),
-                    PositionDirection::Short => DecimalVec(sl.0 - max_sl),
-                };
+                match self.config.max_sl_mode {
+                    MaxSlMode::MarketStopCap => {
+                        sl = match direction {
+                            PositionDirection::Long => DecimalVec(entry_px.0 - max_sl),
+                            PositionDirection::Short => DecimalVec(entry_px.0 + max_sl),
+                        };
+                    }
+                    MaxSlMode::LimitReprice => {
+                        entry_px = match direction {
+                            PositionDirection::Long => DecimalVec(sl.0 + max_sl),
+                            PositionDirection::Short => DecimalVec(sl.0 - max_sl),
+                        };
+                    }
+                }
             }
         }
 
@@ -212,7 +234,11 @@ impl SetupDetector for DojiDetector {
             }
         };
 
-        let entry = if self.config.max_sl_points.is_some() {
+        let use_repriced_limit = self.config.max_sl_points.is_some()
+            && matches!(self.config.max_sl_mode, MaxSlMode::LimitReprice)
+            && initial_risk > self.config.max_sl_points.unwrap_or(Decimal::ZERO);
+
+        let entry = if use_repriced_limit {
             EntryModel::LimitTouch {
                 price: entry_px,
                 expiry_bars: self.config.limit_timeout_bars,

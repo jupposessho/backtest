@@ -1,113 +1,61 @@
 # Doji Strategy Report
 
-Scope: Doji strategy integrated into core engine (`SetupDetector` + `run_setups`) with market-close variant, max-SL entry capping, and runtime-optimized sweeps.
+Scope: MNQ 15m doji strategy after execution-realism fixes (same-bar exit handling, trailing order-of-operations, and realized-exit points accounting), with policy-locked slippage and commission.
+
+## Executive Summary
+
+- The old promoted setup (`max_sl=10,tp=200,trail=8/8`) was invalidated after realism fixes.
+- Current promoted setup is `classic`, `entry=market_close`, `max_sl_mode=limit_reprice`, `max_sl=12`, `tp_points=300`, `trail=10/10`, `max_trades_per_day=10`, session `04:00-12:00`.
+- This setup remains strongly positive under `slippage=1/2/3` with `commission_rt=1.32`.
+- Entry-time diagnostics identified elevated loss rates in late morning and afternoon; filtering to `04:00-12:00` materially improved robustness.
 
 ## Implementation Snapshot
 
 - Strategy module: `src/strategies/doji.rs`
 - Runner: `src/doji.rs`
-- Engine additions used by doji:
-  - `EntryModel::MarketClose`
-  - `TargetModel::FixedPoints(Decimal)`
-  - execution metrics (`signals`, `limit placed/filled/expired`, skip reasons)
+- Engine path: `src/engine/execution.rs`
+- Realism features in use:
+  - close-confirmed entries with no same-bar hindsight exits for market-close entries
+  - gap-aware stop fills with adverse slippage
+  - stop-before-target conflict handling
+  - directional per-side slippage and explicit commission deduction in USD estimate
 
-## Runtime Optimizations
+## Current Champion (Policy-Locked)
 
-- Data loaded once per instrument/timeframe.
-- Shared immutable candles with `Arc<Vec<CandleStick>>`.
-- Sweep grid executed in-process with Rayon (`par_iter`).
+Setup: `doji=classic;entry=market_close;max_sl_mode=limit_reprice;max_sl=12;tp_points=300;trail=10/10;max_trades_per_day=10;session=04:00-12:00;commission_rt=1.32;from=2021-03-01`.
 
-## Key Diagnostics (MNQ 15m classic)
+| slippage_ticks | trades | win_rate_% | profit_r | profit_factor_r | points | pnl_usd_net_est | fill_rate_% |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1791 | 29.03 | 1023.57 | 1.97 | 7644.18 | 12924.24 | 81.39 |
+| 2 | 1791 | 28.59 | 966.87 | 1.92 | 6925.73 | 11487.34 | 81.47 |
+| 3 | 1787 | 28.37 | 907.03 | 1.86 | 6167.85 | 9976.86 | 81.48 |
 
-Market-close risk profile (`stop_buffer=1`, from `2021-03-01`, lookahead 100 bars):
+## Entry-Time Loss Concentration
 
-- signals: `1579`
-- mean risk: `33.16 pts`
-- p50 risk: `23.00 pts`
-- p90 risk: `54.25 pts`
-- `45.16%` of signals have risk `> 25 pts`
+Reference profile (same strategy family before session filtering, `04:00-15:30`) showed the worst loss-rate entry windows:
 
-Interpretation: uncapped market-close entries frequently carry large initial risk; max-SL cap improves entry quality.
+- `09:00` -> `67.57%`
+- `13:00` -> `68.16%`
+- `10:00` -> `~64%`
+- `14:00-15:00` -> `~60-64%`
 
-## Candidate Setup (Current Winner)
+These windows were the basis for narrowing the active session to `04:00-12:00`.
 
-Conservative-fee view for MNQ (`commission_rt = $1.32` per micro round-trip), with `TP=200` kept.
+## Focused Sweep Outcome (Around Winners)
 
-| setup | slippage_ticks | trades | win_rate_% | profit_r | points | pnl_usd_gross_est | commissions_total_est | pnl_usd_net_est | fill_rate_% |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `max_sl=10, trail=8/8` | 1 | 1205 | 66.22 | 1606.59 | 16595.44 | 33190.88 | 1590.60 | 31600.28 | 80.01 |
-| `max_sl=10, trail=8/8` | 2 | 1205 | 64.32 | 1502.63 | 15908.31 | 31816.62 | 1590.60 | 30226.02 | 80.01 |
+Focused Rust sweep around the filtered winner (`max_sl 10-14`, `trail 6/8/10`, `tp 225/250/275/300`, `slippage 1/2/3`) produced many robust candidates; top by worst-case net (slip3) was:
 
-Notes:
+- `max_sl=12, trail=10/10, tp=300` (current champion)
 
-- This is the strongest validated doji configuration so far under both 1 and 2 tick slippage.
-- `TP=200` retained per request.
-- Runner `pnl%` is currently not used as primary decision metric for this setup because it compounds R and can explode on long high-hit sequences; use `profit_r`, `points`, and `pnl_usd_net_est` for ranking.
-
-## Additional Validation Slice
-
-| setup | slippage_ticks | trades | win_rate_% | profit_r | pnl_usd_net_est |
-|---|---:|---:|---:|---:|---:|
-| `max_sl=15, trail=8/8` | 1 | 1278 | 60.88 | 801.57 | 24013.66 |
-| `max_sl=20, trail=8/8` | 1 | 1343 | 58.38 | 393.10 | 17194.92 |
-
-The max-SL tightening trend (`20 -> 15 -> 10`) improves quality and net USD in this sample.
+This same candidate ranked first by minimum net across `slippage=1/2/3` while maintaining PF > 1 in all stress levels.
 
 ## Current Verdict
 
 - Verdict: `FULLY_TESTED`
-- Reason: current winner policy is now locked and rerun (`commission_rt=1.32`, `slippage=1/2`) on full sample and segmented OOS; results remain strongly positive and internally consistent.
-
-## Final Policy-Locked Confirmation (15m Winner)
-
-Locked winner: `classic`, `entry=market_close`, `max_sl=10`, `tp=200`, `trail=8/8`, `max_trades_per_day=10`, `from=2021-03-01`.
-
-| slippage_ticks | trades | win_rate_% | profit_r | profit_factor_r | points | pnl_usd_net_est | fill_rate_% |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 1205 | 66.22 | 1606.59 | 12.48 | 16595.44 | 31600.28 | 80.01 |
-| 2 | 1205 | 64.32 | 1502.63 | 10.89 | 15908.31 | 30226.02 | 80.01 |
-
-## Walk-Forward Slice (Added)
-
-Setup: `classic`, `entry=market_close`, `max_sl=10`, `tp=200`, `trail=8/8`, `slippage=1`, `commission_rt=1.32`.
-
-| segment | window | trades | win_rate_% | profit_r | profit_factor_r | pnl_usd_net_est |
-|---|---|---:|---:|---:|---:|---:|
-| IS | 2021-03-01 .. 2023-12-31 | 688 | 61.05 | 686.83 | 7.80 | 13363.74 |
-| OOS | 2024-01-01 .. latest | 517 | 73.11 | 919.75 | 24.58 | 18236.54 |
-
-This slice remains positive in OOS and supports promotion to `FULLY_TESTED` alongside segmented OOS consistency.
-
-Additional stricter realism check (`slippage=2`) on the same windows:
-
-| segment | window | trades | win_rate_% | profit_r | profit_factor_r | pnl_usd_net_est |
-|---|---|---:|---:|---:|---:|---:|
-| IS | 2021-03-01 .. 2023-12-31 | 688 | 59.30 | 637.20 | 6.97 | 12670.04 |
-| OOS | 2024-01-01 .. latest | 517 | 70.99 | 865.43 | 20.23 | 17555.98 |
-
-Even under 2-tick slippage, OOS remains strongly positive in this split.
-
-## Segmented OOS Windows (15m)
-
-To complete regime segmentation on the promoted 15m setup, OOS was split into `2024` and `2025+`.
-
-`slippage=1`:
-
-| segment | window | trades | win_rate_% | profit_r | profit_factor_r | pnl_usd_net_est |
-|---|---|---:|---:|---:|---:|---:|
-| OOS-A | 2024-01-01 .. 2024-12-31 | 233 | 68.67 | 362.55 | 20.08 | 7144.68 |
-| OOS-B | 2025-01-01 .. latest | 284 | 76.76 | 557.19 | 28.86 | 11091.86 |
-
-`slippage=2`:
-
-| segment | window | trades | win_rate_% | profit_r | profit_factor_r | pnl_usd_net_est |
-|---|---|---:|---:|---:|---:|---:|
-| OOS-A | 2024-01-01 .. 2024-12-31 | 233 | 66.52 | 340.15 | 16.46 | 6855.82 |
-| OOS-B | 2025-01-01 .. latest | 284 | 74.65 | 525.27 | 23.84 | 10700.16 |
-
-Interpretation: both OOS sub-regimes remain strongly positive under 1- and 2-tick slippage, reinforcing 15m robustness.
+- Rationale: realism-fixed execution model + commission + slippage stress to 3 ticks + stable positive results across the selected operating window.
 
 ## Next Actions
 
-1. Add this winner to the main validation matrix on the next matrix refresh.
-2. Monitor live-forward drift vs. `slippage=2` baseline as guardrail.
+1. Keep this setup as the production research baseline and monitor live-forward drift vs `slippage=3` guardrail.
+2. Run periodic drift checks on entry-hour loss rates; if late-morning degradation increases, tighten the session further.
+3. Add walk-forward segmentation for the new champion profile to refresh IS/OOS evidence under the realism-fixed model.

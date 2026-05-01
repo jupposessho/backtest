@@ -7,11 +7,38 @@ use backtest::to_new_york_time;
 use backtest::model::candle_stick::CandleStick;
 use backtest::model::backtest_result::BacktestResult;
 use backtest::model::trade_result::TradeResult;
-use backtest::strategies::doji::{Doji, DojiConfig, DojiEntryMode, DojiTargetMode, DojiType};
+use backtest::model::trade::Trade;
+use backtest::strategies::doji::{Doji, DojiConfig, DojiEntryMode, DojiTargetMode, DojiType, MaxSlMode};
 use clap::{Arg, Command};
+use chrono::{NaiveTime, Timelike};
 use rayon::prelude::*;
 use rust_decimal::Decimal;
+use std::fs;
 use std::sync::Arc;
+
+fn print_entry_time_profile(trades: &[Trade]) {
+    let mut by_hour = vec![(0usize, 0usize, 0usize); 24];
+    for t in trades {
+        let hour = to_new_york_time(t.open_time).hour() as usize;
+        let slot = &mut by_hour[hour];
+        slot.0 += 1;
+        match t.result {
+            TradeResult::Winner => slot.1 += 1,
+            TradeResult::Expense => slot.2 += 1,
+            TradeResult::BreakEven => {}
+        }
+    }
+
+    println!("entry_hour,trades,winners,losers,loss_rate_pct");
+    for h in 0..24 {
+        let (trades, winners, losers) = by_hour[h];
+        if trades == 0 {
+            continue;
+        }
+        let loss_rate = (Decimal::from(losers as u32) / Decimal::from(trades as u32) * Decimal::from(100)).round_dp(2);
+        println!("{:02},{},{},{},{}", h, trades, winners, losers, loss_rate);
+    }
+}
 
 fn load_1m(instrument: &str) -> Vec<CandleStick> {
     let path = match instrument {
@@ -22,6 +49,18 @@ fn load_1m(instrument: &str) -> Vec<CandleStick> {
     };
     CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
         .unwrap_or_else(|e| panic!("failed loading {path}: {e}"))
+}
+
+fn load_binance_tf(instrument: &str, timeframe: i64) -> Vec<CandleStick> {
+    let path = match (instrument, timeframe) {
+        ("eth", 15) => "assets/binance_ETHUSDT_15m.json",
+        ("eth", 60) => "assets/binance_ETHUSDT_1h.json",
+        ("eth", 240) => "assets/binance_ETHUSDT_4h.json",
+        _ => unreachable!(),
+    };
+    let raw = fs::read_to_string(path).unwrap_or_else(|e| panic!("failed loading {path}: {e}"));
+    CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(&raw))
+        .unwrap_or_else(|e| panic!("failed parsing {path}: {e}"))
 }
 
 fn resample_from_1m(data: &[CandleStick], minutes: i64) -> Vec<CandleStick> {
@@ -267,12 +306,19 @@ fn measure_market_risk_profile(
 struct SweepCase {
     instrument: String,
     entry: String,
+    max_sl_mode: String,
+    max_sl_points: Decimal,
     tp_mode: String,
     tp_value: Decimal,
     doji_type: String,
+    max_trades_per_day: usize,
+    session_start: NaiveTime,
+    session_end: NaiveTime,
     stop_buffer_ticks: i32,
     trail_activate: Decimal,
     trail_distance: Decimal,
+    slippage_ticks: i32,
+    commission_rt: Decimal,
 }
 
 #[derive(Clone)]
@@ -280,8 +326,11 @@ struct SweepRow {
     case: SweepCase,
     trades: usize,
     win_rate: Decimal,
+    profit_factor_r: Decimal,
     profit_r: Decimal,
-    pnl_pct: Decimal,
+    points: Decimal,
+    pnl_usd_net_est: Decimal,
+    fill_rate_pct: Decimal,
     costs: Decimal,
 }
 
@@ -304,6 +353,9 @@ fn run_case(data: Arc<Vec<CandleStick>>, case: &SweepCase, timeframe: i64) -> Sw
                 _ => DojiType::Classic,
             },
             stop_buffer_ticks: case.stop_buffer_ticks,
+            max_trades_per_day: case.max_trades_per_day,
+            session_start: case.session_start,
+            session_end: case.session_end,
             trail_activate_points: case.trail_activate,
             trail_distance_points: case.trail_distance,
             entry_mode: match case.entry.as_str() {
@@ -315,17 +367,22 @@ fn run_case(data: Arc<Vec<CandleStick>>, case: &SweepCase, timeframe: i64) -> Sw
             } else {
                 DojiTargetMode::FixedPoints(case.tp_value)
             },
+            max_sl_points: Some(case.max_sl_points),
+            max_sl_mode: match case.max_sl_mode.as_str() {
+                "limit_reprice" => MaxSlMode::LimitReprice,
+                _ => MaxSlMode::MarketStopCap,
+            },
             execution: ExecutionConfig {
                 commission_rate_per_side: Decimal::ZERO,
                 fee_rate_per_side: Decimal::ZERO,
-                slippage_ticks_per_side: 0,
+                slippage_ticks_per_side: case.slippage_ticks,
                 tick_size,
             },
             ..DojiConfig::default()
         },
     };
     let setups = strategy.detect_setups();
-    let trades = backtest::engine::execution::run_setups(&strategy.data, &setups, &strategy.config.execution);
+    let (trades, metrics) = run_setups_with_metrics(&strategy.data, &setups, &strategy.config.execution);
     let result = BacktestResult {
         trades,
         capital: Decimal::from(1000),
@@ -337,13 +394,45 @@ fn run_case(data: Arc<Vec<CandleStick>>, case: &SweepCase, timeframe: i64) -> Sw
     } else {
         Decimal::from(winners as u32) / Decimal::from(trades as u32) * Decimal::from(100)
     };
+    let losers = result.result(TradeResult::Expense);
+    let gross_loss_r = Decimal::from(losers as u32);
+    let gross_profit_r = result.profit_in_r() + gross_loss_r;
+    let profit_factor_r = if gross_loss_r > Decimal::ZERO {
+        (gross_profit_r / gross_loss_r).round_dp(2)
+    } else if gross_profit_r > Decimal::ZERO {
+        Decimal::from(9999)
+    } else {
+        Decimal::ZERO
+    };
+    let point_value = match case.instrument.as_str() {
+        "mnq" => Decimal::from(2),
+        "mes" => Decimal::from(5),
+        "gc" => Decimal::from(10),
+        "eth" => Decimal::ONE,
+        _ => Decimal::ONE,
+    };
+    let points = result.profit_in_points();
+    let pnl_usd_gross = (points * point_value).round_dp(2);
+    let commissions_total = (case.commission_rt * Decimal::from(trades as u32)).round_dp(2);
+    let pnl_usd_net_est = (pnl_usd_gross - commissions_total).round_dp(2);
+    let fill_rate_pct = if metrics.limit_orders_placed == 0 {
+        Decimal::ZERO
+    } else {
+        (Decimal::from(metrics.limit_orders_filled as u32)
+            / Decimal::from(metrics.limit_orders_placed as u32)
+            * Decimal::from(100))
+            .round_dp(2)
+    };
     let _ = timeframe;
     SweepRow {
         case: case.clone(),
         trades,
         win_rate: win_rate.round_dp(2),
+        profit_factor_r,
         profit_r: result.profit_in_r(),
-        pnl_pct: result.pnl(),
+        points,
+        pnl_usd_net_est,
+        fill_rate_pct,
         costs: result.costs_total(),
     }
 }
@@ -353,7 +442,7 @@ fn main() {
         .arg(
             Arg::new("instrument")
                 .long("instrument")
-                .value_parser(["mnq", "mes", "gc"])
+                .value_parser(["mnq", "mes", "gc", "eth"])
                 .default_value("mnq"),
         )
         .arg(
@@ -383,13 +472,22 @@ fn main() {
         .arg(Arg::new("tp-points").long("tp-points").value_parser(clap::value_parser!(f64)).required(false))
         .arg(Arg::new("tp-runner-r").long("tp-runner-r").value_parser(clap::value_parser!(f64)).default_value("100"))
         .arg(Arg::new("max-sl-points").long("max-sl-points").value_parser(clap::value_parser!(f64)).required(false))
+        .arg(
+            Arg::new("max-sl-mode")
+                .long("max-sl-mode")
+                .value_parser(["market_stop_cap", "limit_reprice"])
+                .default_value("market_stop_cap"),
+        )
         .arg(Arg::new("commission-rt").long("commission-rt").value_parser(clap::value_parser!(f64)).required(false))
         .arg(Arg::new("slippage-ticks").long("slippage-ticks").value_parser(clap::value_parser!(i32)).default_value("1"))
         .arg(Arg::new("from-ts").long("from-ts").value_parser(clap::value_parser!(i64)).required(false))
         .arg(Arg::new("to-ts").long("to-ts").value_parser(clap::value_parser!(i64)).required(false))
         .arg(Arg::new("measure-reversal").long("measure-reversal").action(clap::ArgAction::SetTrue))
         .arg(Arg::new("measure-market-risk").long("measure-market-risk").action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("entry-time-profile").long("entry-time-profile").action(clap::ArgAction::SetTrue))
         .arg(Arg::new("lookahead-bars").long("lookahead-bars").value_parser(clap::value_parser!(usize)).default_value("100"))
+        .arg(Arg::new("session-start").long("session-start").value_parser(clap::value_parser!(String)).default_value("09:30"))
+        .arg(Arg::new("session-end").long("session-end").value_parser(clap::value_parser!(String)).default_value("15:30"))
         .arg(Arg::new("sweep").long("sweep").action(clap::ArgAction::SetTrue))
         .get_matches();
 
@@ -406,16 +504,27 @@ fn main() {
         .get_one::<String>("entry")
         .map(|s| s.as_str())
         .unwrap_or("midpoint_limit");
+    let session_start = matches
+        .get_one::<String>("session-start")
+        .and_then(|v| NaiveTime::parse_from_str(v, "%H:%M").ok())
+        .unwrap_or_else(|| NaiveTime::from_hms_opt(9, 30, 0).unwrap());
+    let session_end = matches
+        .get_one::<String>("session-end")
+        .and_then(|v| NaiveTime::parse_from_str(v, "%H:%M").ok())
+        .unwrap_or_else(|| NaiveTime::from_hms_opt(15, 30, 0).unwrap());
 
-    let mut data = load_1m(instrument);
+    let mut data = if instrument == "eth" {
+        load_binance_tf(instrument, timeframe)
+    } else {
+        let base = load_1m(instrument);
+        resample_from_1m(&base, timeframe)
+    };
     if let Some(from_ts) = matches.get_one::<i64>("from-ts") {
         data.retain(|c| c.open_time >= *from_ts);
     }
     if let Some(to_ts) = matches.get_one::<i64>("to-ts") {
         data.retain(|c| c.open_time <= *to_ts);
     }
-    data = resample_from_1m(&data, timeframe);
-
     if matches.get_flag("measure-reversal") {
         let lookahead = *matches.get_one::<usize>("lookahead-bars").unwrap_or(&100usize);
         let body_pct_max = Decimal::from_f64_retain(*matches.get_one::<f64>("body-pct-max").unwrap_or(&5.0))
@@ -431,6 +540,7 @@ fn main() {
         let tick_size = match instrument {
             "mnq" | "mes" => Decimal::new(25, 2),
             "gc" => Decimal::new(1, 1),
+            "eth" => Decimal::new(1, 2),
             _ => Decimal::new(25, 2),
         };
         measure_market_risk_profile(&data, doji_type, body_pct_max, stop_buffer_ticks, tick_size);
@@ -441,14 +551,18 @@ fn main() {
         let from_ts = matches.get_one::<i64>("from-ts").copied();
         let instruments = ["mnq"];
         let entries = ["market_close"];
-        let doji_types = ["classic", "strict", "long_legged", "dragonfly", "gravestone", "loose"];
-        let stop_buffers = [0i32, 1, 2, 3];
-        let trail_activates = [10i64, 20];
-        let trail_distances = [10i64, 20];
-        let mnq_points = [10i64, 20, 30, 50, 75, 100, 125, 150];
-        let mes_points = [10i64, 20, 30, 40, 50, 60, 75];
-        let gc_points = [5i64, 10, 15, 20, 30, 40, 50];
-        let r_values = [1i64, 2, 3, 4, 5, 8, 10, 15, 20];
+        let max_sl_modes = ["limit_reprice"];
+        let doji_types = ["classic"];
+        let max_trades_caps = [10usize];
+        let sessions = [
+            ("winner_window", NaiveTime::from_hms_opt(4, 0, 0).unwrap(), NaiveTime::from_hms_opt(12, 0, 0).unwrap()),
+        ];
+        let stop_buffers = [1i32];
+        let trail_pairs = [(6i64, 6i64), (8i64, 8i64), (10i64, 10i64)];
+        let max_sls = [10i64, 11, 12, 13, 14];
+        let tp_points = [225i64, 250, 275, 300];
+        let slippage_ticks = [1i32, 2, 3];
+        let commission_rt = Decimal::from_f64_retain(1.32).unwrap_or(Decimal::from(132) / Decimal::from(100));
 
         let mut datasets: Vec<(String, Arc<Vec<CandleStick>>)> = Vec::new();
         for ins in instruments {
@@ -464,19 +578,36 @@ fn main() {
         for ins in instruments {
             for ent in entries {
                 for dt in doji_types {
-                    for sb in stop_buffers {
-                        for ta in trail_activates {
-                            for td in trail_distances {
-                                cases.push(SweepCase {
-                                    instrument: ins.to_string(),
-                                    entry: ent.to_string(),
-                                    tp_mode: "fixed_points".to_string(),
-                                    tp_value: Decimal::from(150),
-                                    doji_type: dt.to_string(),
-                                    stop_buffer_ticks: sb,
-                                    trail_activate: Decimal::from(ta),
-                                    trail_distance: Decimal::from(td),
-                                });
+                    for cap in max_trades_caps {
+                        for (_, sess_start, sess_end) in sessions {
+                            for sb in stop_buffers {
+                                for (ta, td) in trail_pairs {
+                                for msm in max_sl_modes {
+                                    for msl in max_sls {
+                                        for tp in tp_points {
+                                            for slip in slippage_ticks {
+                                                cases.push(SweepCase {
+                                                    instrument: ins.to_string(),
+                                                    entry: ent.to_string(),
+                                                    max_sl_mode: msm.to_string(),
+                                                    max_sl_points: Decimal::from(msl),
+                                                    tp_mode: "fixed_points".to_string(),
+                                                    tp_value: Decimal::from(tp),
+                                                    doji_type: dt.to_string(),
+                                                    max_trades_per_day: cap,
+                                                    session_start: sess_start,
+                                                    session_end: sess_end,
+                                                    stop_buffer_ticks: sb,
+                                                    trail_activate: Decimal::from(ta),
+                                                    trail_distance: Decimal::from(td),
+                                                    slippage_ticks: slip,
+                                                    commission_rt,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                }
                             }
                         }
                     }
@@ -496,22 +627,31 @@ fn main() {
             })
             .collect();
 
-        println!("instrument,entry,doji_type,stop_buffer,trail_activate,trail_distance,tp_mode,tp_value,trades,win_rate,profit_r,pnl_pct,costs");
+        println!("instrument,entry,max_sl_mode,max_sl_points,doji_type,max_trades_per_day,session_start,session_end,stop_buffer,trail_activate,trail_distance,tp_mode,tp_value,slippage_ticks,trades,win_rate,profit_factor_r,profit_r,points,pnl_usd_net_est,fill_rate_pct,costs");
         for r in &rows {
             println!(
-                "{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                 r.case.instrument,
                 r.case.entry,
+                r.case.max_sl_mode,
+                r.case.max_sl_points,
                 r.case.doji_type,
+                r.case.max_trades_per_day,
+                r.case.session_start,
+                r.case.session_end,
                 r.case.stop_buffer_ticks,
                 r.case.trail_activate,
                 r.case.trail_distance,
                 r.case.tp_mode,
                 r.case.tp_value,
+                r.case.slippage_ticks,
                 r.trades,
                 r.win_rate,
+                r.profit_factor_r,
                 r.profit_r,
-                r.pnl_pct,
+                r.points,
+                r.pnl_usd_net_est,
+                r.fill_rate_pct,
                 r.costs
             );
         }
@@ -521,6 +661,7 @@ fn main() {
     let tick_size = match instrument {
         "mnq" | "mes" => Decimal::new(25, 2),
         "gc" => Decimal::new(1, 1),
+        "eth" => Decimal::new(1, 2),
         _ => unreachable!(),
     };
 
@@ -552,6 +693,8 @@ fn main() {
             trail_distance_points: Decimal::from_f64_retain(*matches.get_one::<f64>("trail-distance").unwrap_or(&10.0))
                 .unwrap_or(Decimal::from(10)),
             max_trades_per_day: *matches.get_one::<usize>("max-trades-per-day").unwrap_or(&3),
+            session_start,
+            session_end,
             entry_mode: match entry {
                 "market_close" => DojiEntryMode::MarketClose,
                 _ => DojiEntryMode::MidpointLimit,
@@ -560,6 +703,14 @@ fn main() {
             max_sl_points: matches
                 .get_one::<f64>("max-sl-points")
                 .and_then(|v| Decimal::from_f64_retain(*v)),
+            max_sl_mode: match matches
+                .get_one::<String>("max-sl-mode")
+                .map(|s| s.as_str())
+                .unwrap_or("market_stop_cap")
+            {
+                "limit_reprice" => MaxSlMode::LimitReprice,
+                _ => MaxSlMode::MarketStopCap,
+            },
             execution: ExecutionConfig {
                 commission_rate_per_side: Decimal::ZERO,
                 fee_rate_per_side: Decimal::ZERO,
@@ -579,6 +730,7 @@ fn main() {
         "mnq" => Decimal::from(2),
         "mes" => Decimal::from(5),
         "gc" => Decimal::from(10),
+        "eth" => Decimal::ONE,
         _ => Decimal::ONE,
     };
     let pnl_usd_gross = (result.profit_in_points() * point_value).round_dp(2);
@@ -588,6 +740,7 @@ fn main() {
         .unwrap_or_else(|| match instrument {
             "mnq" | "mes" => Decimal::from_f64_retain(1.32).unwrap(),
             "gc" => Decimal::from_f64_retain(2.20).unwrap(),
+            "eth" => Decimal::ZERO,
             _ => Decimal::ZERO,
         });
     let commissions_total = (commission_rt * Decimal::from(result.number_of_trades() as u32)).round_dp(2);
@@ -613,6 +766,9 @@ fn main() {
         }
     );
     print_stats(&result);
+    if matches.get_flag("entry-time-profile") {
+        print_entry_time_profile(&result.trades);
+    }
     println!("pnl_usd_gross_est : {}", pnl_usd_gross);
     println!("commission_rt_used: {} | commissions_total_est: {}", commission_rt, commissions_total);
     println!("pnl_usd_net_est   : {}", pnl_usd_net);

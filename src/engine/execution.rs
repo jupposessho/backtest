@@ -41,6 +41,7 @@ pub fn run_setups_with_metrics(
     let mut pending_limit: Option<(SetupCandidate, usize, EntryPolicy)> = None;
 
     for (i, c) in candles.iter().copied().enumerate() {
+        let mut opened_this_bar = false;
         while setup_idx < setups.len() && setups[setup_idx].signal_index < i {
             metrics.skipped_other += 1;
             setup_idx += 1;
@@ -58,6 +59,7 @@ pub fn run_setups_with_metrics(
                         open = build_position(candidate, DecimalVec(price.0), c.open_time, cfg);
                         if open.is_some() {
                             metrics.limit_orders_filled += 1;
+                            opened_this_bar = true;
                         }
                         pending_limit = None;
                     }
@@ -69,11 +71,17 @@ pub fn run_setups_with_metrics(
                 match candidate.entry {
                     EntryModel::SignalClose | EntryModel::MarketClose => {
                         open = build_position(candidate, c.close, c.close_time, cfg);
+                        if open.is_some() {
+                            opened_this_bar = true;
+                        }
                     }
                     EntryModel::NextBarOpen => {
                         if i + 1 < candles.len() {
                             let next = candles[i + 1];
                             open = build_position(candidate, next.open, next.open_time, cfg);
+                            if open.is_some() {
+                                opened_this_bar = true;
+                            }
                         }
                     }
                     EntryModel::LimitTouch { expiry_bars, .. } => {
@@ -110,7 +118,10 @@ pub fn run_setups_with_metrics(
         }
 
         if let Some(mut p) = open {
-            apply_trailing(&mut p, c);
+            if opened_this_bar {
+                open = Some(p);
+                continue;
+            }
 
             if stop_hit(c, &p) {
                 let stop_fill = gap_aware_stop_fill(c, &p, cfg);
@@ -132,6 +143,7 @@ pub fn run_setups_with_metrics(
                 trades.push(build_trade(p, c.close_time, tp_fill, TradeResult::Winner, cfg));
                 open = None;
             } else {
+                apply_trailing(&mut p, c);
                 open = Some(p);
             }
         }

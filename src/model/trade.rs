@@ -32,16 +32,8 @@ impl Trade {
 
     pub fn points(&self) -> DecimalVec {
         match self.direction {
-            PositionDirection::Short => match self.result {
-                TradeResult::Winner => self.entry - self.tp,
-                TradeResult::Expense => self.entry - self.sl,
-                TradeResult::BreakEven => DecimalVec::new(0),
-            },
-            PositionDirection::Long => match self.result {
-                TradeResult::Winner => self.tp - self.entry,
-                TradeResult::Expense => self.sl - self.entry,
-                TradeResult::BreakEven => DecimalVec::new(0),
-            },
+            PositionDirection::Short => self.entry - self.tp,
+            PositionDirection::Long => self.tp - self.entry,
         }
     }
 
