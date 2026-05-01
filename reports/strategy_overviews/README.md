@@ -6,6 +6,7 @@ This folder contains the latest generated strategy evaluation reports.
 - `TTRADES_TARGETED_GRID_SOL_MTF.md` - focused SOL MTF parameter sweep report.
 - `TTRADES_FULLY_TESTED_RANKING.md` - ranked shortlist of fully tested candidates.
 - `DOJI_STRATEGY_REPORT.md` - doji implementation notes and futures sweep outcomes.
+- `ORB_LONDON_REVERSAL_NOT_RECOMMENDED.md` - ORB London reversal findings and not-recommended decision.
 
 Writers updated:
 

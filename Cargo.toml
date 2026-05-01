@@ -85,6 +85,26 @@ path = "src/ttrades_matrix.rs"
 name = "ttrades_targeted_grid"
 path = "src/ttrades_targeted_grid.rs"
 
+[[bin]]
+name = "orb_london_reversal"
+path = "src/orb_london_reversal.rs"
+
+[[bin]]
+name = "orb_london_reversal_sweep"
+path = "src/orb_london_reversal_sweep.rs"
+
+[[bin]]
+name = "orb_london_reversal_summary"
+path = "src/orb_london_reversal_summary.rs"
+
+[[bin]]
+name = "orb_london_reversal_opt"
+path = "src/orb_london_reversal_opt.rs"
+
+[[bin]]
+name = "ce_sweep"
+path = "src/ce_sweep.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"
