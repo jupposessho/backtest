@@ -49,6 +49,11 @@
   - run bounded parallel sweeps (cap workers, e.g. `min(available, 8)`).
 - Use a naive gate first (`fee=0`, `slippage=0`): if net <= 0 or PF < 1, skip deeper realism sweeps for that case.
 - Keep `--fast` mode in sweep binaries for iteration (lower bar cap and fewer slippage levels), then run full mode for final reports.
+- For any new sweep/backtest runner (including ad-hoc validation binaries), default to runtime optimizations:
+  - load each instrument/timeframe dataset once,
+  - share immutable candle vectors via `Arc<Vec<CandleStick>>`,
+  - execute parameter grids with Rayon parallel iterators,
+  - avoid per-case data reload/resample work when a shared precomputed dataset can be reused.
 
 ## Reversal Sweep Defaults
 

@@ -20,6 +20,7 @@ pub enum EntryPolicy {
 #[derive(Clone, Copy)]
 pub enum EntryModel {
     SignalClose,
+    MarketClose,
     NextBarOpen,
     LimitTouch {
         price: DecimalVec,
@@ -40,6 +41,7 @@ pub enum StopModel {
 pub enum TargetModel {
     FixedPrice(DecimalVec),
     FixedR(Decimal),
+    FixedPoints(Decimal),
 }
 
 #[derive(Clone, Copy)]

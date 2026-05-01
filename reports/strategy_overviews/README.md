@@ -5,6 +5,7 @@ This folder contains the latest generated strategy evaluation reports.
 - `STRATEGY_VALIDATION_MATRIX.md` - cross-asset strategy matrix with final verdicts.
 - `TTRADES_TARGETED_GRID_SOL_MTF.md` - focused SOL MTF parameter sweep report.
 - `TTRADES_FULLY_TESTED_RANKING.md` - ranked shortlist of fully tested candidates.
+- `DOJI_STRATEGY_REPORT.md` - doji implementation notes and futures sweep outcomes.
 
 Writers updated:
 

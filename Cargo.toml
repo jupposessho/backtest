@@ -66,6 +66,10 @@ name = "data_probe"
 path = "src/data_probe.rs"
 
 [[bin]]
+name = "doji"
+path = "src/doji.rs"
+
+[[bin]]
 name = "ttrades_fractal"
 path = "src/ttrades_fractal_runner.rs"
 

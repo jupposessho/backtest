@@ -1099,7 +1099,7 @@ impl Mc {
         };
 
         let probe_entry = match entry_model {
-            EntryModel::SignalClose => actual.close,
+            EntryModel::SignalClose | EntryModel::MarketClose => actual.close,
             EntryModel::NextBarOpen => actual.close,
             EntryModel::LimitTouch { price, .. } => price,
             EntryModel::LimitByPolicy { policy, .. } => resolve_entry_policy(policy, direction, actual, previous),

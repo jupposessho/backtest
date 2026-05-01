@@ -11,22 +11,54 @@ use crate::model::trade_result::TradeResult;
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ExecutionMetrics {
+    pub setup_count: usize,
+    pub limit_orders_placed: usize,
+    pub limit_orders_filled: usize,
+    pub limit_orders_expired: usize,
+    pub skipped_open_same_dir: usize,
+    pub skipped_open_opposite_dir: usize,
+    pub skipped_other: usize,
+}
+
 pub fn run_setups(candles: &[CandleStick], setups: &[SetupCandidate], cfg: &ExecutionConfig) -> Vec<Trade> {
+    run_setups_with_metrics(candles, setups, cfg).0
+}
+
+pub fn run_setups_with_metrics(
+    candles: &[CandleStick],
+    setups: &[SetupCandidate],
+    cfg: &ExecutionConfig,
+) -> (Vec<Trade>, ExecutionMetrics) {
     let mut trades = Vec::new();
+    let mut metrics = ExecutionMetrics {
+        setup_count: setups.len(),
+        ..ExecutionMetrics::default()
+    };
     let mut open: Option<OpenPosition> = None;
     let mut setup_idx = 0usize;
     let mut pending_limit: Option<(SetupCandidate, usize, EntryPolicy)> = None;
 
     for (i, c) in candles.iter().copied().enumerate() {
+        while setup_idx < setups.len() && setups[setup_idx].signal_index < i {
+            metrics.skipped_other += 1;
+            setup_idx += 1;
+        }
+
         if open.is_none() {
             if let Some((candidate, expires_at, policy)) = pending_limit {
                 if i > expires_at {
+                    metrics.limit_orders_expired += 1;
                     pending_limit = None;
                 } else {
                     let previous = if i > 0 { candles[i - 1] } else { c };
                     let price = resolve_entry_policy(policy, candidate.direction, c, previous);
                     if c.low <= price && c.high >= price {
                         open = build_position(candidate, DecimalVec(price.0), c.open_time, cfg);
+                        if open.is_some() {
+                            metrics.limit_orders_filled += 1;
+                        }
                         pending_limit = None;
                     }
                 }
@@ -35,7 +67,7 @@ pub fn run_setups(candles: &[CandleStick], setups: &[SetupCandidate], cfg: &Exec
             while open.is_none() && setup_idx < setups.len() && setups[setup_idx].signal_index == i {
                 let candidate = setups[setup_idx];
                 match candidate.entry {
-                    EntryModel::SignalClose => {
+                    EntryModel::SignalClose | EntryModel::MarketClose => {
                         open = build_position(candidate, c.close, c.close_time, cfg);
                     }
                     EntryModel::NextBarOpen => {
@@ -46,6 +78,7 @@ pub fn run_setups(candles: &[CandleStick], setups: &[SetupCandidate], cfg: &Exec
                     }
                     EntryModel::LimitTouch { expiry_bars, .. } => {
                         if let EntryModel::LimitTouch { price, .. } = candidate.entry {
+                            metrics.limit_orders_placed += 1;
                             pending_limit = Some((
                                 candidate,
                                 i + expiry_bars,
@@ -54,8 +87,23 @@ pub fn run_setups(candles: &[CandleStick], setups: &[SetupCandidate], cfg: &Exec
                         }
                     }
                     EntryModel::LimitByPolicy { policy, expiry_bars } => {
+                        metrics.limit_orders_placed += 1;
                         pending_limit = Some((candidate, i + expiry_bars, policy));
                     }
+                }
+                setup_idx += 1;
+            }
+        } else {
+            while setup_idx < setups.len() && setups[setup_idx].signal_index == i {
+                let candidate = setups[setup_idx];
+                if let Some(p) = open {
+                    if candidate.direction == p.direction {
+                        metrics.skipped_open_same_dir += 1;
+                    } else {
+                        metrics.skipped_open_opposite_dir += 1;
+                    }
+                } else {
+                    metrics.skipped_other += 1;
                 }
                 setup_idx += 1;
             }
@@ -89,7 +137,11 @@ pub fn run_setups(candles: &[CandleStick], setups: &[SetupCandidate], cfg: &Exec
         }
     }
 
-    trades
+    if pending_limit.is_some() {
+        metrics.limit_orders_expired += 1;
+    }
+
+    (trades, metrics)
 }
 
 fn build_position(
@@ -111,6 +163,10 @@ fn build_position(
         TargetModel::FixedR(r) => match candidate.direction {
             crate::model::position_direction::PositionDirection::Long => DecimalVec(entry.0 + risk * r),
             crate::model::position_direction::PositionDirection::Short => DecimalVec(entry.0 - risk * r),
+        },
+        TargetModel::FixedPoints(points) => match candidate.direction {
+            crate::model::position_direction::PositionDirection::Long => DecimalVec(entry.0 + points),
+            crate::model::position_direction::PositionDirection::Short => DecimalVec(entry.0 - points),
         },
     };
     Some(OpenPosition {
