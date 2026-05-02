@@ -20,7 +20,7 @@ use crate::{
     model::{candle_stick::CandleStick, trade::Trade},
     strategies::mc::{
         EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig,
-        McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrendFilter,
+        McMode, SignalPattern, SignalQualityConfig, TimeWindow, TrailingStopConfig, TrendFilter,
     },
     to_new_york_time,
 };
@@ -66,6 +66,7 @@ fn mc_trades(data: Vec<CandleStick>) -> Vec<Trade> {
             enabled: false,
             ..FvgConfig::default()
         },
+        signal_quality: SignalQualityConfig::default(),
         daily_open_time: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         prev_open_fill_window_candles: 3,
         pattern: SignalPattern::Mc,

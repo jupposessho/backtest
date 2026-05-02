@@ -35,6 +35,7 @@ pub struct McConfig {
     pub level_filters: LevelFilters,
     pub trend_filter: TrendFilter,
     pub fvg_filter: FvgConfig,
+    pub signal_quality: SignalQualityConfig,
     pub daily_open_time: NaiveTime,
     pub execution: ExecutionConfig,
 }
@@ -52,8 +53,28 @@ impl Default for McConfig {
             level_filters: LevelFilters::default(),
             trend_filter: TrendFilter::None,
             fvg_filter: FvgConfig::default(),
+            signal_quality: SignalQualityConfig::default(),
             daily_open_time: NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
             execution: ExecutionConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SignalQualityConfig {
+    pub min_body_to_range: Decimal,
+    pub min_range_to_prev_range: Decimal,
+    pub min_range_to_avg_range: Decimal,
+    pub avg_range_lookback: usize,
+}
+
+impl Default for SignalQualityConfig {
+    fn default() -> Self {
+        Self {
+            min_body_to_range: Decimal::ZERO,
+            min_range_to_prev_range: Decimal::ZERO,
+            min_range_to_avg_range: Decimal::ZERO,
+            avg_range_lookback: 20,
         }
     }
 }
@@ -305,6 +326,56 @@ struct ActivePosition {
 }
 
 impl Mc {
+    fn signal_quality_ok(&self, ind: usize, actual: CandleStick, previous: CandleStick) -> bool {
+        let cfg = &self.config.signal_quality;
+        if cfg.min_body_to_range <= Decimal::ZERO
+            && cfg.min_range_to_prev_range <= Decimal::ZERO
+            && cfg.min_range_to_avg_range <= Decimal::ZERO
+        {
+            return true;
+        }
+
+        let range = (actual.high.0 - actual.low.0).abs();
+        if range <= Decimal::ZERO {
+            return false;
+        }
+
+        if cfg.min_body_to_range > Decimal::ZERO {
+            let body = (actual.close.0 - actual.open.0).abs();
+            if (body / range) < cfg.min_body_to_range {
+                return false;
+            }
+        }
+
+        if cfg.min_range_to_prev_range > Decimal::ZERO {
+            let prev_range = (previous.high.0 - previous.low.0).abs();
+            if prev_range <= Decimal::ZERO || range < prev_range * cfg.min_range_to_prev_range {
+                return false;
+            }
+        }
+
+        if cfg.min_range_to_avg_range > Decimal::ZERO {
+            let lookback = cfg.avg_range_lookback.max(1);
+            let start = ind.saturating_sub(lookback);
+            let mut sum = Decimal::ZERO;
+            let mut count = 0usize;
+            for i in start..ind {
+                let c = self.data[i];
+                sum += (c.high.0 - c.low.0).abs();
+                count += 1;
+            }
+            if count == 0 {
+                return false;
+            }
+            let avg = sum / Decimal::from_i32(count as i32).unwrap();
+            if avg <= Decimal::ZERO || range < avg * cfg.min_range_to_avg_range {
+                return false;
+            }
+        }
+
+        true
+    }
+
     fn wick_sizes(candle: CandleStick) -> (DecimalVec, DecimalVec) {
         let body_top = if candle.open > candle.close {
             candle.open
@@ -976,6 +1047,11 @@ impl Mc {
                 if in_trade_window {
                     let (bullish_signal, bearish_signal) =
                         Self::signal_matches(&self.config.pattern, actual, previous);
+                    let quality_ok = if bullish_signal || bearish_signal {
+                        self.signal_quality_ok(ind, actual, previous)
+                    } else {
+                        false
+                    };
 
                     let mut fvg_ok = !self.config.fvg_filter.enabled;
                     if self.config.fvg_filter.enabled {
@@ -1036,7 +1112,7 @@ impl Mc {
                         McMode::Auto => true,
                     };
 
-                    if level_ok && fvg_ok && trend_ok {
+                    if level_ok && fvg_ok && trend_ok && quality_ok {
                         if bullish_signal {
                             if let Some(setup) = self.build_setup(
                                 PositionDirection::Long,

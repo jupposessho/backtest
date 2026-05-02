@@ -3,14 +3,16 @@ extern crate rust_decimal;
 use chrono::NaiveTime;
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
+use std::env;
 
 use backtest::{
     candle_stick_loader::CandleStickLoader,
     execute,
     model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
     strategies::mc::{
-        EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig,
-        McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrendFilter,
+        EntryMode, ExecutionConfig, FvgConfig, FvgTimeframe, LevelFilters, MarketEntryMode, Mc,
+        McConfig, McMode, SignalPattern, SignalQualityConfig, TimeWindow, TrailingStopConfig,
+        TrendFilter,
     },
 };
 
@@ -161,6 +163,13 @@ fn config_with(
     trend_filter: TrendFilter,
     trailing_stop: TrailingStopConfig,
 ) -> McConfig {
+    let naive_mode = env::var("MC_NAIVE").ok().as_deref() == Some("1");
+    let (commission_rate_per_side, slippage_ticks_per_side) = if naive_mode {
+        (Decimal::ZERO, 0)
+    } else {
+        (Decimal::from_f32(0.001).unwrap(), 1)
+    };
+
     McConfig {
         mode,
         pattern,
@@ -177,13 +186,14 @@ fn config_with(
             enabled: false,
             ..FvgConfig::default()
         },
+        signal_quality: SignalQualityConfig::default(),
         daily_open_time: NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         trailing_stop,
         execution: ExecutionConfig {
             market_entry: MarketEntryMode::NextBarOpen,
-            commission_rate_per_side: Decimal::from_f32(0.001).unwrap(),
+            commission_rate_per_side,
             fee_rate_per_side: Decimal::ZERO,
-            slippage_ticks_per_side: 1,
+            slippage_ticks_per_side,
             tick_size: Decimal::from_f32(0.01).unwrap(),
         },
     }
@@ -589,6 +599,107 @@ fn main() {
                 TrendFilter::Ema { fast: 50, slow: 200 },
                 trail_progressive.clone(),
             ),
+        ),
+        (
+            "flt_engulf_ema200_rr2_close_fvg",
+            {
+                let mut cfg = config_with(
+                    McMode::ContinuationEma200,
+                    SignalPattern::Engulfing,
+                    EntryMode::Close,
+                    rr_2,
+                    false,
+                    TrendFilter::Ema { fast: 50, slow: 200 },
+                    trail_none.clone(),
+                );
+                cfg.fvg_filter = FvgConfig {
+                    enabled: true,
+                    timeframes: vec![FvgTimeframe::H1, FvgTimeframe::H4],
+                    touch_window_candles: 2,
+                };
+                cfg
+            },
+        ),
+        (
+            "flt_engulf_ema200_rr2_prevopen_fvg",
+            {
+                let mut cfg = config_with(
+                    McMode::ContinuationEma200,
+                    SignalPattern::Engulfing,
+                    EntryMode::PrevOpen,
+                    rr_2,
+                    false,
+                    TrendFilter::Ema { fast: 50, slow: 200 },
+                    trail_none.clone(),
+                );
+                cfg.fvg_filter = FvgConfig {
+                    enabled: true,
+                    timeframes: vec![FvgTimeframe::H1, FvgTimeframe::H4],
+                    touch_window_candles: 2,
+                };
+                cfg
+            },
+        ),
+        (
+            "flt_engulf_ema200_rr2_close_narrow",
+            {
+                let mut cfg = config_with(
+                    McMode::ContinuationEma200,
+                    SignalPattern::Engulfing,
+                    EntryMode::Close,
+                    rr_2,
+                    false,
+                    TrendFilter::Ema { fast: 50, slow: 200 },
+                    trail_none.clone(),
+                );
+                cfg.trade_window = Some(TimeWindow {
+                    start: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+                    end: NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
+                });
+                cfg
+            },
+        ),
+        (
+            "flt_engulf_ema200_rr2_close_quality",
+            {
+                let mut cfg = config_with(
+                    McMode::ContinuationEma200,
+                    SignalPattern::Engulfing,
+                    EntryMode::Close,
+                    rr_2,
+                    false,
+                    TrendFilter::Ema { fast: 50, slow: 200 },
+                    trail_none.clone(),
+                );
+                cfg.signal_quality = SignalQualityConfig {
+                    min_body_to_range: Decimal::from_f32(0.60).unwrap(),
+                    min_range_to_prev_range: Decimal::from_f32(1.10).unwrap(),
+                    min_range_to_avg_range: Decimal::from_f32(1.20).unwrap(),
+                    avg_range_lookback: 20,
+                };
+                cfg
+            },
+        ),
+        (
+            "flt_engulf_ema200_rr2_prevopen_quality",
+            {
+                let mut cfg = config_with(
+                    McMode::ContinuationEma200,
+                    SignalPattern::Engulfing,
+                    EntryMode::PrevOpen,
+                    rr_2,
+                    false,
+                    TrendFilter::Ema { fast: 50, slow: 200 },
+                    trail_none.clone(),
+                );
+                cfg.signal_quality = SignalQualityConfig {
+                    min_body_to_range: Decimal::from_f32(0.60).unwrap(),
+                    min_range_to_prev_range: Decimal::from_f32(1.10).unwrap(),
+                    min_range_to_avg_range: Decimal::from_f32(1.20).unwrap(),
+                    avg_range_lookback: 20,
+                };
+                cfg
+            },
         ),
     ];
 
