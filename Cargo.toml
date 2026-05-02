@@ -105,6 +105,10 @@ path = "src/orb_london_reversal_opt.rs"
 name = "ce_sweep"
 path = "src/ce_sweep.rs"
 
+[[bin]]
+name = "mayne_review"
+path = "src/mayne_review.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"
