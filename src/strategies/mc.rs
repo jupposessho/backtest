@@ -36,6 +36,8 @@ pub struct McConfig {
     pub trend_filter: TrendFilter,
     pub fvg_filter: FvgConfig,
     pub signal_quality: SignalQualityConfig,
+    pub max_sl_points: Option<Decimal>,
+    pub max_sl_mode: MaxSlMode,
     pub daily_open_time: NaiveTime,
     pub execution: ExecutionConfig,
 }
@@ -54,10 +56,18 @@ impl Default for McConfig {
             trend_filter: TrendFilter::None,
             fvg_filter: FvgConfig::default(),
             signal_quality: SignalQualityConfig::default(),
+            max_sl_points: None,
+            max_sl_mode: MaxSlMode::KeepEntryMoveStop,
             daily_open_time: NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
             execution: ExecutionConfig::default(),
         }
     }
+}
+
+#[derive(Clone)]
+pub enum MaxSlMode {
+    KeepEntryMoveStop,
+    KeepStopMoveEntry,
 }
 
 #[derive(Clone)]
@@ -1150,12 +1160,12 @@ impl Mc {
         previous: CandleStick,
         rr_target: Decimal,
     ) -> Option<SetupCandidate> {
-        let sl = match direction {
+        let mut sl = match direction {
             PositionDirection::Long => actual.low,
             PositionDirection::Short => actual.high,
         };
 
-        let entry_model = match self.config.entry_mode {
+        let mut entry_model = match self.config.entry_mode {
             EntryMode::Close => match self.config.execution.market_entry {
                 MarketEntryMode::SignalClose => EntryModel::SignalClose,
                 MarketEntryMode::NextBarOpen => EntryModel::NextBarOpen,
@@ -1174,16 +1184,54 @@ impl Mc {
             },
         };
 
-        let probe_entry = match entry_model {
+        let mut probe_entry = match entry_model {
             EntryModel::SignalClose | EntryModel::MarketClose => actual.close,
             EntryModel::NextBarOpen => actual.close,
             EntryModel::LimitTouch { price, .. } => price,
             EntryModel::LimitByPolicy { policy, .. } => resolve_entry_policy(policy, direction, actual, previous),
         };
-        let risk = match direction {
+
+        let mut risk = match direction {
             PositionDirection::Long => probe_entry.0 - sl.0,
             PositionDirection::Short => sl.0 - probe_entry.0,
         };
+
+        if let Some(max_sl) = self.config.max_sl_points {
+            if max_sl > Decimal::ZERO && risk > max_sl {
+                match self.config.max_sl_mode {
+                    MaxSlMode::KeepEntryMoveStop => {
+                        sl = match direction {
+                            PositionDirection::Long => DecimalVec(probe_entry.0 - max_sl),
+                            PositionDirection::Short => DecimalVec(probe_entry.0 + max_sl),
+                        };
+                    }
+                    MaxSlMode::KeepStopMoveEntry => {
+                        let repriced = match direction {
+                            PositionDirection::Long => DecimalVec(sl.0 + max_sl),
+                            PositionDirection::Short => DecimalVec(sl.0 - max_sl),
+                        };
+                        probe_entry = repriced;
+                        entry_model = match entry_model {
+                            EntryModel::LimitByPolicy { expiry_bars, .. } => EntryModel::LimitTouch {
+                                price: repriced,
+                                expiry_bars,
+                            },
+                            EntryModel::LimitTouch { expiry_bars, .. } => EntryModel::LimitTouch {
+                                price: repriced,
+                                expiry_bars,
+                            },
+                            _ => return None,
+                        };
+                    }
+                }
+
+                risk = match direction {
+                    PositionDirection::Long => probe_entry.0 - sl.0,
+                    PositionDirection::Short => sl.0 - probe_entry.0,
+                };
+            }
+        }
+
         if risk <= Decimal::ZERO {
             return None;
         }

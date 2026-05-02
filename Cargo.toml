@@ -106,6 +106,10 @@ name = "ce_sweep"
 path = "src/ce_sweep.rs"
 
 [[bin]]
+name = "ob_engulfing"
+path = "src/ob_engulfing.rs"
+
+[[bin]]
 name = "mayne_review"
 path = "src/mayne_review.rs"
 
