@@ -387,6 +387,32 @@ fn main() {
     println!("MNQ 15m OB(engulfing) backtest variants");
     println!("bars: {}", data_15m.len());
 
+    let mut targeted_grid = String::new();
+    targeted_grid.push_str("# OB Engulfing Targeted Grid\n\n");
+    targeted_grid.push_str("| section | variant | asset | timeframe | split | trades | win_rate_% | profit_r | pf_r | pnl_% | verdict |\n");
+    targeted_grid.push_str("|---|---|---|---|---|---:|---:|---:|---:|---:|---|\n");
+    let mut push_grid = |section: &str,
+                         asset: &str,
+                         tf: &str,
+                         split: &str,
+                         verdict: &str,
+                         row: &VariantResult| {
+        targeted_grid.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+            section,
+            row.label,
+            asset,
+            tf,
+            split,
+            row.trades,
+            row.win_rate.round_dp(2),
+            row.profit_r.round_dp(2),
+            row.profit_factor_r.round_dp(2),
+            row.pnl_pct.round_dp(2),
+            verdict,
+        ));
+    };
+
     let quick = vec![
         Variant {
             label: "quick prev_open".to_string(),
@@ -421,7 +447,9 @@ fn main() {
         }
         .execute();
         print_stats(&v.label, &result);
-        all_results.push(summarize(&v.label, &result));
+        let row = summarize(&v.label, &result);
+        push_grid("mnq_quick", "MNQ", "15m", "full", "TESTED", &row);
+        all_results.push(row);
     }
 
     println!("\n--- Session Variants (prev_open) ---");
@@ -435,7 +463,9 @@ fn main() {
         }
         .execute();
         print_stats(&v.label, &result);
-        all_results.push(summarize(&v.label, &result));
+        let row = summarize(&v.label, &result);
+        push_grid("mnq_session", "MNQ", "15m", "full", "TESTED", &row);
+        all_results.push(row);
     }
 
     println!("\n--- Quality Variants (prev_open, full session) ---");
@@ -449,7 +479,9 @@ fn main() {
         }
         .execute();
         print_stats(&v.label, &result);
-        all_results.push(summarize(&v.label, &result));
+        let row = summarize(&v.label, &result);
+        push_grid("mnq_quality", "MNQ", "15m", "full", "TESTED", &row);
+        all_results.push(row);
     }
 
     println!("\n--- Bounded Sweep (72 variants) ---");
@@ -460,7 +492,9 @@ fn main() {
             config: v.cfg,
         }
         .execute();
-        all_results.push(summarize(&v.label, &result));
+        let row = summarize(&v.label, &result);
+        push_grid("mnq_bounded", "MNQ", "15m", "full", "TESTED", &row);
+        all_results.push(row);
     }
 
     all_results.sort_by(|a, b| {
@@ -491,7 +525,9 @@ fn main() {
             config: v.cfg,
         }
         .execute();
-        fine_results.push(summarize(&v.label, &result));
+        let row = summarize(&v.label, &result);
+        push_grid("mnq_nyam_fine", "MNQ", "15m", "full", "TESTED", &row);
+        fine_results.push(row);
     }
     fine_results.sort_by(|a, b| {
         b.profit_r
@@ -552,6 +588,8 @@ fn main() {
         }
         .execute();
         print_stats(&v.label, &result);
+        let row = summarize(&v.label, &result);
+        push_grid("mnq_fixed_sl25", "MNQ", "15m", "full", "TESTED", &row);
     }
 
     println!("\n--- Fixed SL Grid (NYAM + quality-on + pair_mid rr2.0) ---");
@@ -579,7 +617,9 @@ fn main() {
                 config: cfg,
             }
             .execute();
-            sl_grid_results.push(summarize(&label, &result));
+            let row = summarize(&label, &result);
+            push_grid("mnq_fixed_sl_grid", "MNQ", "15m", "full", "TESTED", &row);
+            sl_grid_results.push(row);
         }
     }
 
@@ -640,7 +680,9 @@ fn main() {
                     config: cfg.clone(),
                 }
                 .execute();
-                train_rows.push((cfg, summarize(&label, &train_result)));
+                let row = summarize(&label, &train_result);
+                push_grid("mnq_narrow_train", "MNQ", "15m", "train", "TESTED", &row);
+                train_rows.push((cfg, row));
             }
         }
     }
@@ -672,6 +714,7 @@ fn main() {
         }
         .execute();
         let test_row = summarize(&format!("OOS of [{}]", best_train.label), &test_result);
+        push_grid("mnq_narrow_oos", "MNQ", "15m", "test", "TESTED", &test_row);
 
         println!("Best train candidate:");
         println!(
@@ -752,6 +795,8 @@ fn main() {
         let nyam_label = format!("ETH {} nyam", tf);
         let full_row = run_config(data.clone(), full_day_cfg, &full_label);
         let nyam_row = run_config(data, nyam_cfg, &nyam_label);
+        push_grid("eth_transfer", "ETH", tf, "full", "TESTED", &full_row);
+        push_grid("eth_transfer", "ETH", tf, "nyam", "TESTED", &nyam_row);
 
         println!(
             "{} | trades={} win%={} profit_r={} pf_r={} pnl%={}",
@@ -855,6 +900,9 @@ fn main() {
             }
         }
 
+        for row in &rows {
+            push_grid("eth_refine", "ETH", tf, "full", "TESTED", row);
+        }
         let top = sorted_top(rows, 5);
         println!("Top 5 ETH {} refined variants:", tf);
         for row in &top {
@@ -954,6 +1002,8 @@ fn main() {
 
         let train_row = run_config(train, winner_cfg.clone(), &format!("ETH {} winner train", tf));
         let test_row = run_config(test, winner_cfg, &format!("ETH {} winner test", tf));
+        push_grid("eth_winner_split", "ETH", tf, "train", "TESTED", &train_row);
+        push_grid("eth_winner_split", "ETH", tf, "test", "TESTED", &test_row);
 
         println!(
             "ETH {} winner split | train: trades={} win%={} profit_r={} pf_r={} pnl%={} | test: trades={} win%={} profit_r={} pf_r={} pnl%={}",
@@ -1141,6 +1191,7 @@ fn main() {
                 r.profit_factor_r.round_dp(2),
                 r.pnl_pct.round_dp(2)
             ));
+            push_grid("eth_rolling_oos", "ETH", if name.contains("15m") { "15m" } else { "4h" }, &format!("W{}", i + 1), "TESTED", &r);
         }
         let verdict = if pass_profit >= 4 && pass_pf >= 4 {
             "PROMOTE"
@@ -1160,6 +1211,22 @@ fn main() {
             report.push_str(&format!("- {}\n", l));
         }
         report.push_str("\n");
+        let verdict_row = VariantResult {
+            label: format!("{} summary", name),
+            trades: 0,
+            win_rate: Decimal::ZERO,
+            profit_r: Decimal::from(pass_profit as i64),
+            profit_factor_r: Decimal::from(pass_pf as i64),
+            pnl_pct: Decimal::ZERO,
+        };
+        push_grid(
+            "eth_rolling_oos_verdict",
+            "ETH",
+            if name.contains("15m") { "15m" } else { "4h" },
+            "5w",
+            verdict,
+            &verdict_row,
+        );
     }
 
     std::fs::write(
@@ -1167,4 +1234,9 @@ fn main() {
         report,
     )
     .unwrap_or_else(|e| panic!("failed writing report: {}", e));
+    std::fs::write(
+        "reports/strategy_overviews/OB_ENGULFING_TARGETED_GRID.md",
+        targeted_grid,
+    )
+    .unwrap_or_else(|e| panic!("failed writing targeted grid: {}", e));
 }

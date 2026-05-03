@@ -1,5 +1,7 @@
 # OB Engulfing Progress Report
 
+Detailed variant grid: `reports/strategy_overviews/OB_ENGULFING_TARGETED_GRID.md`.
+
 ## MNQ Production Candidate
 - Session: NYAM (09:15-12:15)
 - Pattern: Engulfing (OB style), Entry: PairMidpoint
@@ -86,4 +88,3 @@ Criteria: OOS PF>=1.20 and OOS profit_r>0 in >=4/5 windows.
 - W3: trades=67 profit_r=28.99 pf_r=1.78 pnl%=32.27
 - W4: trades=43 profit_r=4.99 pf_r=1.18 pnl%=4.50
 - W5: trades=48 profit_r=12.79 pf_r=1.44 pnl%=12.86
-
