@@ -1,6 +1,7 @@
 use chrono::{NaiveDate, NaiveTime};
 use rust_decimal::Decimal;
 
+use crate::engine::types::{apply_entry_slippage, apply_exit_slippage, ExecutionConfig};
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -28,14 +29,27 @@ pub enum OrbSlType {
     RangePct(Decimal),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum OrbEntryModel {
+    Boundary,
+    NextBarOpen,
+}
+
 #[derive(Clone, Debug)]
 pub struct OrbConfig {
     pub duration: OrbDuration,
+    pub active_window_minutes: usize,
     pub sl_type: OrbSlType,
     /// TP = entry ± rr_target × risk
     pub rr_target: Decimal,
     /// Force-close any open position at 16:30 ET
     pub eod_close: bool,
+    pub max_hold_bars: Option<usize>,
+    pub retest_mode: bool,
+    pub retest_max_bars: usize,
+    pub entry_model: OrbEntryModel,
+    pub conservative_intrabar: bool,
+    pub execution: ExecutionConfig,
     pub fee_config: FeeConfig,
 }
 
@@ -43,9 +57,16 @@ impl Default for OrbConfig {
     fn default() -> Self {
         Self {
             duration: OrbDuration::Minutes30,
+            active_window_minutes: 6 * 60,
             sl_type: OrbSlType::OppositeRange,
             rr_target: Decimal::from(2),
             eod_close: true,
+            max_hold_bars: None,
+            retest_mode: false,
+            retest_max_bars: 12,
+            entry_model: OrbEntryModel::Boundary,
+            conservative_intrabar: false,
+            execution: ExecutionConfig::default(),
             fee_config: FeeConfig::default(),
         }
     }
@@ -97,6 +118,40 @@ fn compute_sl(
     }
 }
 
+fn fee_rate_pct_to_rate(pct: Decimal) -> Decimal {
+    pct / Decimal::from(100)
+}
+
+fn build_trade_with_exit(
+    position: Position,
+    close_time: i64,
+    exit: DecimalVec,
+    result: TradeResult,
+    cfg: &OrbConfig,
+) -> Trade {
+    let entry_notional = position.entry.0;
+    let exit_notional = exit.0;
+    let maker_rate = fee_rate_pct_to_rate(cfg.fee_config.maker_fee_pct);
+    let taker_rate = fee_rate_pct_to_rate(cfg.fee_config.taker_fee_pct);
+    let commission = entry_notional * maker_rate + exit_notional * taker_rate;
+    let slippage = (cfg.execution.tick_size
+        * Decimal::from(cfg.execution.slippage_ticks_per_side).abs())
+    .abs()
+        * Decimal::from(2);
+    Trade {
+        direction: position.direction,
+        open_time: position.open_time,
+        close_time,
+        entry: position.entry,
+        sl: position.sl,
+        tp: exit,
+        result,
+        commission,
+        slippage,
+        fees: Decimal::ZERO,
+    }
+}
+
 // ── TradingModel implementation ───────────────────────────────────────────────
 
 impl TradingModel for Orb {
@@ -114,6 +169,11 @@ impl TradingModel for Orb {
         let mut range_complete = false;
         let mut traded_today = false;
         let mut active_position: Option<Position> = None;
+        let mut active_position_open_index: Option<usize> = None;
+        let mut index_in_day: usize = 0;
+        let mut break_direction: Option<PositionDirection> = None;
+        let mut break_index_in_day: Option<usize> = None;
+        let mut pending_entry: Option<(PositionDirection, Decimal, Decimal)> = None;
 
         for candle in &self.data {
             let ny_open = to_new_york_time(candle.open_time);
@@ -127,6 +187,11 @@ impl TradingModel for Orb {
                 session_low = None;
                 range_complete = false;
                 traded_today = false;
+                active_position_open_index = None;
+                index_in_day = 0;
+                break_direction = None;
+                break_index_in_day = None;
+                pending_entry = None;
                 // NOTE: active_position carries over to the new day only if eod_close was off.
                 // With eod_close = true it will have been closed before midnight.
             }
@@ -137,7 +202,7 @@ impl TradingModel for Orb {
                 && active_position.is_some()
             {
                 let pos = active_position.take().unwrap();
-                let exit_price = candle.open.0;
+                let exit_price = apply_exit_slippage(pos.direction, candle.open, &self.config.execution).0;
 
                 let profitable = match pos.direction {
                     PositionDirection::Long => exit_price > pos.entry.0,
@@ -155,9 +220,40 @@ impl TradingModel for Orb {
                     TradeResult::Expense
                 };
 
-                let trade = Trade::from_position(closed_pos, candle.open_time, result, &self.config.fee_config);
+                let trade = build_trade_with_exit(
+                    closed_pos,
+                    candle.open_time,
+                    DecimalVec(exit_price),
+                    result,
+                    &self.config,
+                );
                 trades.push(trade);
+                active_position_open_index = None;
                 continue;
+            }
+
+            if active_position.is_none() {
+                if let Some((dir, hi, lo)) = pending_entry.take() {
+                    let entry = apply_entry_slippage(dir, candle.open, &self.config.execution).0;
+                    let sl_raw = compute_sl(entry, dir, hi, lo, &self.config.sl_type);
+                    let risk = (entry - sl_raw).abs();
+                    if risk > Decimal::ZERO {
+                        let tp = match dir {
+                            PositionDirection::Long => entry + self.config.rr_target * risk,
+                            PositionDirection::Short => entry - self.config.rr_target * risk,
+                        };
+                        active_position = Some(Position {
+                            direction: dir,
+                            open_time: candle.open_time,
+                            entry: DecimalVec(entry),
+                            sl: DecimalVec(sl_raw),
+                            tp: DecimalVec(tp),
+                            at_break_even: false,
+                        });
+                        active_position_open_index = Some(index_in_day);
+                        traded_today = true;
+                    }
+                }
             }
 
             // ── 3. Build opening range ────────────────────────────────────
@@ -179,14 +275,60 @@ impl TradingModel for Orb {
 
             // ── 5. Manage active position ────────────────────────────────
             if let Some(pos) = active_position {
+                if let Some(max_hold) = self.config.max_hold_bars {
+                    if let Some(open_i) = active_position_open_index {
+                        if index_in_day.saturating_sub(open_i) >= max_hold {
+                            let exit_price = apply_exit_slippage(pos.direction, candle.close, &self.config.execution).0;
+                            let profitable = match pos.direction {
+                                PositionDirection::Long => exit_price > pos.entry.0,
+                                PositionDirection::Short => exit_price < pos.entry.0,
+                            };
+                            let mut closed_pos = pos;
+                            let result = if profitable {
+                                closed_pos.tp = DecimalVec(exit_price);
+                                TradeResult::Winner
+                            } else {
+                                closed_pos.sl = DecimalVec(exit_price);
+                                TradeResult::Expense
+                            };
+                            let trade = build_trade_with_exit(
+                                closed_pos,
+                                candle.close_time,
+                                DecimalVec(exit_price),
+                                result,
+                                &self.config,
+                            );
+                            trades.push(trade);
+                            active_position = None;
+                            active_position_open_index = None;
+                            index_in_day += 1;
+                            continue;
+                        }
+                    }
+                }
                 let closed = match pos.direction {
                     PositionDirection::Long => {
-                        if candle.high.0 >= pos.tp.0 {
-                            let trade = Trade::from_position(pos, candle.close_time, TradeResult::Winner, &self.config.fee_config);
+                        if candle.low.0 <= pos.sl.0 && self.config.conservative_intrabar {
+                            let stop_fill = if candle.open.0 <= pos.sl.0 {
+                                apply_exit_slippage(pos.direction, candle.open, &self.config.execution)
+                            } else {
+                                apply_exit_slippage(pos.direction, pos.sl, &self.config.execution)
+                            };
+                            let trade = build_trade_with_exit(pos, candle.close_time, stop_fill, TradeResult::Expense, &self.config);
+                            trades.push(trade);
+                            true
+                        } else if candle.high.0 >= pos.tp.0 {
+                            let tp_fill = apply_exit_slippage(pos.direction, pos.tp, &self.config.execution);
+                            let trade = build_trade_with_exit(pos, candle.close_time, tp_fill, TradeResult::Winner, &self.config);
                             trades.push(trade);
                             true
                         } else if candle.low.0 <= pos.sl.0 {
-                            let trade = Trade::from_position(pos, candle.close_time, TradeResult::Expense, &self.config.fee_config);
+                            let stop_fill = if candle.open.0 <= pos.sl.0 {
+                                apply_exit_slippage(pos.direction, candle.open, &self.config.execution)
+                            } else {
+                                apply_exit_slippage(pos.direction, pos.sl, &self.config.execution)
+                            };
+                            let trade = build_trade_with_exit(pos, candle.close_time, stop_fill, TradeResult::Expense, &self.config);
                             trades.push(trade);
                             true
                         } else {
@@ -194,12 +336,27 @@ impl TradingModel for Orb {
                         }
                     }
                     PositionDirection::Short => {
-                        if candle.low.0 <= pos.tp.0 {
-                            let trade = Trade::from_position(pos, candle.close_time, TradeResult::Winner, &self.config.fee_config);
+                        if candle.high.0 >= pos.sl.0 && self.config.conservative_intrabar {
+                            let stop_fill = if candle.open.0 >= pos.sl.0 {
+                                apply_exit_slippage(pos.direction, candle.open, &self.config.execution)
+                            } else {
+                                apply_exit_slippage(pos.direction, pos.sl, &self.config.execution)
+                            };
+                            let trade = build_trade_with_exit(pos, candle.close_time, stop_fill, TradeResult::Expense, &self.config);
+                            trades.push(trade);
+                            true
+                        } else if candle.low.0 <= pos.tp.0 {
+                            let tp_fill = apply_exit_slippage(pos.direction, pos.tp, &self.config.execution);
+                            let trade = build_trade_with_exit(pos, candle.close_time, tp_fill, TradeResult::Winner, &self.config);
                             trades.push(trade);
                             true
                         } else if candle.high.0 >= pos.sl.0 {
-                            let trade = Trade::from_position(pos, candle.close_time, TradeResult::Expense, &self.config.fee_config);
+                            let stop_fill = if candle.open.0 >= pos.sl.0 {
+                                apply_exit_slippage(pos.direction, candle.open, &self.config.execution)
+                            } else {
+                                apply_exit_slippage(pos.direction, pos.sl, &self.config.execution)
+                            };
+                            let trade = build_trade_with_exit(pos, candle.close_time, stop_fill, TradeResult::Expense, &self.config);
                             trades.push(trade);
                             true
                         } else {
@@ -210,23 +367,77 @@ impl TradingModel for Orb {
 
                 if closed {
                     active_position = None;
+                    active_position_open_index = None;
                 }
                 // Position managed — don't look for entry this candle
+                index_in_day += 1;
                 continue;
             }
 
             // ── 6. Entry signal ──────────────────────────────────────────
             if range_complete && !traded_today {
+                let minutes_after_or = ny_time.signed_duration_since(or_end).num_minutes();
+                if minutes_after_or < 0 || minutes_after_or as usize > self.config.active_window_minutes {
+                    index_in_day += 1;
+                    continue;
+                }
                 let hi = match session_high {
                     Some(h) => h,
-                    None => continue,
+                    None => {
+                        index_in_day += 1;
+                        continue;
+                    }
                 };
                 let lo = match session_low {
                     Some(l) => l,
-                    None => continue,
+                    None => {
+                        index_in_day += 1;
+                        continue;
+                    }
                 };
 
-                let direction = if candle.close.0 > hi {
+                let direction = if self.config.retest_mode {
+                    match break_direction {
+                        None => {
+                            if candle.close.0 > hi {
+                                break_direction = Some(PositionDirection::Long);
+                                break_index_in_day = Some(index_in_day);
+                            } else if candle.close.0 < lo {
+                                break_direction = Some(PositionDirection::Short);
+                                break_index_in_day = Some(index_in_day);
+                            }
+                            None
+                        }
+                        Some(PositionDirection::Long) => {
+                            let within = break_index_in_day
+                                .map(|b| index_in_day.saturating_sub(b) <= self.config.retest_max_bars)
+                                .unwrap_or(false);
+                            if !within {
+                                break_direction = None;
+                                break_index_in_day = None;
+                                None
+                            } else if candle.low.0 <= hi {
+                                Some(PositionDirection::Long)
+                            } else {
+                                None
+                            }
+                        }
+                        Some(PositionDirection::Short) => {
+                            let within = break_index_in_day
+                                .map(|b| index_in_day.saturating_sub(b) <= self.config.retest_max_bars)
+                                .unwrap_or(false);
+                            if !within {
+                                break_direction = None;
+                                break_index_in_day = None;
+                                None
+                            } else if candle.high.0 >= lo {
+                                Some(PositionDirection::Short)
+                            } else {
+                                None
+                            }
+                        }
+                    }
+                } else if candle.close.0 > hi {
                     Some(PositionDirection::Long)
                 } else if candle.close.0 < lo {
                     Some(PositionDirection::Short)
@@ -235,42 +446,41 @@ impl TradingModel for Orb {
                 };
 
                 if let Some(dir) = direction {
-                    let (entry, sl_raw) = match dir {
-                        PositionDirection::Long => {
-                            let e = hi;
-                            let s = compute_sl(e, dir, hi, lo, &self.config.sl_type);
-                            (e, s)
+                    match self.config.entry_model {
+                        OrbEntryModel::Boundary => {
+                            let boundary_entry = match dir {
+                                PositionDirection::Long => DecimalVec(hi),
+                                PositionDirection::Short => DecimalVec(lo),
+                            };
+                            let entry = apply_entry_slippage(dir, boundary_entry, &self.config.execution).0;
+                            let sl_raw = compute_sl(entry, dir, hi, lo, &self.config.sl_type);
+                            let risk = (entry - sl_raw).abs();
+                            if risk <= Decimal::ZERO {
+                                index_in_day += 1;
+                                continue;
+                            }
+                            let tp = match dir {
+                                PositionDirection::Long => entry + self.config.rr_target * risk,
+                                PositionDirection::Short => entry - self.config.rr_target * risk,
+                            };
+                            active_position = Some(Position {
+                                direction: dir,
+                                open_time: candle.close_time,
+                                entry: DecimalVec(entry),
+                                sl: DecimalVec(sl_raw),
+                                tp: DecimalVec(tp),
+                                at_break_even: false,
+                            });
+                            active_position_open_index = Some(index_in_day);
+                            traded_today = true;
                         }
-                        PositionDirection::Short => {
-                            let e = lo;
-                            let s = compute_sl(e, dir, hi, lo, &self.config.sl_type);
-                            (e, s)
+                        OrbEntryModel::NextBarOpen => {
+                            pending_entry = Some((dir, hi, lo));
                         }
-                    };
-
-                    let risk = (entry - sl_raw).abs();
-                    if risk <= Decimal::ZERO {
-                        continue;
                     }
-
-                    let tp = match dir {
-                        PositionDirection::Long => entry + self.config.rr_target * risk,
-                        PositionDirection::Short => entry - self.config.rr_target * risk,
-                    };
-
-                    let position = Position {
-                        direction: dir,
-                        open_time: candle.close_time,
-                        entry: DecimalVec(entry),
-                        sl: DecimalVec(sl_raw),
-                        tp: DecimalVec(tp),
-                        at_break_even: false,
-                    };
-
-                    active_position = Some(position);
-                    traded_today = true;
                 }
             }
+            index_in_day += 1;
         }
 
         BacktestResult {
