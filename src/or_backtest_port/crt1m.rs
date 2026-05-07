@@ -1,0 +1,27 @@
+use chrono::NaiveTime;
+
+use super::{Config, EntryFillMode, ReversalSpec};
+
+pub(super) fn reversal_spec() -> ReversalSpec {
+    ReversalSpec {
+        pre_start: NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
+        pre_end: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+        trade_start: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+        trade_end: NaiveTime::from_hms_opt(11, 0, 0).unwrap(),
+        allow_second_trade: true,
+        sweep_tolerance_pct: 0.001,
+    }
+}
+
+pub(super) fn apply_preset(cfg: &mut Config) {
+    cfg.entry_fill_mode = EntryFillMode::Close;
+    cfg.position_sizing_type = "Fixed USD Risk".to_string();
+    cfg.fixed_usd_risk = 150.0;
+    cfg.fixed_contracts = 1.0;
+    cfg.breakout_candles = 5;
+    cfg.sl_value = 0.7;
+    cfg.tp_value = 1.8;
+    cfg.enable_second_chance = true;
+    cfg.rth_start = "00:00".to_string();
+    cfg.rth_end = "23:59".to_string();
+}
