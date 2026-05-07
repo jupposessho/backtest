@@ -20,7 +20,7 @@ Risk-adjusted score = `(net_profit_% * profit_factor * win_rate_%) / max(max_dd_
 |---|---|---|---|---:|---|---:|---:|---:|---:|---:|---|---|
 | ttrades_fractal_mtf | crypto | SOL | 15m/4h | 20.89 | % | 1.25 | 38.30 | 141 | 28.66 | 2.30 | FULLY_TESTED | `tt_mtf_sol_15m4h_cisd_rr2` |
 | doji | futures | MNQ | 15m | 12924.24 (slip1) | $ | 1.97 (slip1) | 29.03 (slip1) | 1791 (slip1) | n/a | n/a | FULLY_TESTED | `doji_mnq_15m_classic_mc_sl12_tp300` |
-| ema_wick_reclaim_mnq | futures | MNQ | 1m (EMA200 5m anchor) | 18672.08 (full dataset), 9678.91 (from 2025-01-01) | $ | n/a (custom $/trade model) | 22.25 (full), 23.34 (2025+) | 4197 (full), 1337 (2025+) | n/a | n/a | PARTIALLY_TESTED | `mnq_ema_wick_rr5_wick8_atr0.5_cap0.20_all_atr_obmid` |
+| ema_wick_reclaim_mnq | futures | MNQ | 1m (EMA200 5m anchor) | 18672.08 (full dataset), 11533.18 (from 2025-01-01 tuned) | $ | n/a (custom $/trade model) | 22.25 (full), 24.49 (2025+ tuned) | 4197 (full), 1613 (2025+ tuned) | n/a | n/a | PARTIALLY_TESTED | `mnq_ema_wick_rr5_wick8_atr0.5_cap0.25_obw6_hold90_all_atr_obmid` |
 | ttrades_fractal | futures | GOLD | 1m | -18838.46 | $ | 0.31 | 19.23 | 754 | -5247.04 | 0.41 | PARTIALLY_TESTED | `tt_single_gold_1m_rr2_fvg_cisd` |
 | mc (manipulation candle/engulf) | crypto | BTC | 5m | negative (rep. balance -194092.84 to -3664305.62) | % | up to 0.94 | n/a | n/a | n/a | n/a | HOLD / PARTIALLY_TESTED | `mc_engulf_filters_reality` |
 | ce | futures | MNQ | 1m | -27.17 avg test (best 8-fold cluster) | $ | 0.83 | n/a | 21 avg test | n/a | n/a | NOT_PROMOTED | `ce_london_research_8fold` |
@@ -36,7 +36,7 @@ Risk-adjusted score = `(net_profit_% * profit_factor * win_rate_%) / max(max_dd_
 | crypto score champion | ttrades_fractal_mtf | SOL | 15m/4h | net 20.89%, pf 1.25, wf_test_net 28.66%, wf_test_pf 2.30 |
 | recent-window deployment champion (normalized sizing) | ttrades_fractal_mtf (portfolio combo) | BTC+ETH+SOL | 15m/4h | pooled last-6m +315.15 USD, positive months 4/6 (BTC 0.1, ETH 1, SOL 10) |
 | futures cash champion (supplemental) | doji | MNQ | 15m | net 12924.24 USD (slip1), pf 1.97 |
-| futures challenger (new) | ema_wick_reclaim_mnq | MNQ | 1m | net 9678.91 USD, monthly +13/-2 (15 months), slippage stress positive at $1.5/$2.0 |
+| futures challenger (new) | ema_wick_reclaim_mnq | MNQ | 1m | net 11533.18 USD (2025+ tuned), monthly analysis available in MNQ EMA report |
 | futures high hit-rate challenger (new) | ema_wick_reclaim_mnq | MNQ | 3m | net 5964.47 USD, win rate 30.35%, monthly +12/-3 (15 months) |
 
 ## Setup Details (Moved Out of Table)
@@ -54,7 +54,7 @@ Risk-adjusted score = `(net_profit_% * profit_factor * win_rate_%) / max(max_dd_
 - `orb_london_mnq_30m_1400_close`: `orb=30m; session_close=14:00; min_excursion=20%; max_reenter=12; be/time_stop=off`.
 - `orb_realism_grid_oos_2026-05-04`: `entry=next_bar_open; intrabar=stop_first; gap_stop=adverse_open_fill; fees=maker+taker; slippage=1/2/3 ticks per side; datasets=MNQ(1m/5m/15m/1h resampled), BTC/ETH/SOL(5m/15m/1h/4h); final gate=rolling OOS 5 windows requiring PF>=1.20 and profit_r>0 in >=4/5`.
 - `ob_engulf_mnq_15m_pairmid_rr2_sl32.5`: `session=NYAM; entry=PairMidpoint; quality body>=40% and range>=1.1x prev; rr=2.0; max_sl=32.5; mode=KeepEntryMoveStop`.
-- `mnq_ema_wick_rr5_wick8_atr0.5_cap0.20_all_atr_obmid`: `entry_tf=1m; ema_anchor=EMA200(5m); trigger=wick_through_close_back; entry=OB midpoint retest; stop_mode=ATR; rr=5; min_wick=8 ticks; atr_floor_mult=0.5 (ATR14); cost_cap=0.20R; session=all; commission_rt=1.24; slippage_rt=1.00; full_dataset=+$18672.08 (4197 trades, 22.25% win); 2025+=+$9678.91 (1337 trades, 23.34% win); monthly_2025+=+13/-2`.
+- `mnq_ema_wick_rr5_wick8_atr0.5_cap0.25_obw6_hold90_all_atr_obmid`: `entry_tf=1m; ema_anchor=EMA200(5m); trigger=wick_through_close_back; entry=OB midpoint retest (ob_wait=6); stop_mode=ATR; rr=5; min_wick=8 ticks; atr_floor_mult=0.5 (ATR14); cost_cap=0.25R; max_hold=90; session=all; commission_rt=1.24; slippage_rt=1.00; full_dataset=+$18672.08 (legacy full baseline reference); 2025+ tuned=+$11533.18 (1613 trades, 24.49% win)`.
 - `mnq_ema_wick_rr4_wick8_atr0.5_cap0.20_ny_atr_obmid`: `entry_tf=3m; ema_anchor=EMA200(5m); trigger=wick_through_close_back; entry=OB midpoint retest; stop_mode=ATR; rr=4; min_wick=8 ticks; atr_floor_mult=0.5 (ATR14); cost_cap=0.20R; session=NY (09:30-11:30); commission_rt=1.24; slippage_rt=1.00; win_rate=30.35%; monthly=+12/-3`.
 
 Note: table is normalized to one best row per strategy; alternate variants are retained in setup details.

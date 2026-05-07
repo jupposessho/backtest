@@ -7,6 +7,7 @@ This folder contains the latest generated strategy evaluation reports.
 - `TTRADES_FULLY_TESTED_RANKING.md` - ranked shortlist of fully tested candidates.
 - `DOJI_STRATEGY_REPORT.md` - doji implementation notes and futures sweep outcomes.
 - `ORB_LONDON_REVERSAL_NOT_RECOMMENDED.md` - ORB London reversal findings and not-recommended decision.
+- `MNQ_EMA_WICK_RECLAIM_REPORT.md` - MNQ EMA wick-reclaim sweep, robustness, and monthly breakdown.
 
 Writers updated:
 

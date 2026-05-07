@@ -9,3 +9,4 @@ pub mod mc;
 pub mod doji;
 pub mod orb_london_reversal;
 pub mod ce;
+pub mod orb;

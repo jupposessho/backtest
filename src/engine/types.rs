@@ -58,7 +58,7 @@ pub enum TrailingModel {
     },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ExecutionConfig {
     pub commission_rate_per_side: Decimal,
     pub fee_rate_per_side: Decimal,

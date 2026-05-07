@@ -23,10 +23,11 @@ serde = "1.0.164"
 itertools = "0.11.0"
 iso8601-timestamp = "0.2.16"
 
-clap = "4.5.5"
+clap = { version = "4.5.5", features = ["derive"] }
 reqwest = { version = "0.11", features = ["json"] }
 anyhow = "1.0"
 dialoguer = "0.10"
+csv = "1.4"
 
 binance = { git = "https://github.com/wisespace-io/binance-rs.git" }
 lazy_static = "1.4"
@@ -102,6 +103,10 @@ name = "orb_london_reversal_opt"
 path = "src/orb_london_reversal_opt.rs"
 
 [[bin]]
+name = "orb_variants"
+path = "src/orb_variants.rs"
+
+[[bin]]
 name = "ce_sweep"
 path = "src/ce_sweep.rs"
 
@@ -112,6 +117,66 @@ path = "src/ob_engulfing.rs"
 [[bin]]
 name = "mayne_review"
 path = "src/mayne_review.rs"
+
+[[bin]]
+name = "mayne_grid_report"
+path = "src/mayne_grid_report.rs"
+
+[[bin]]
+name = "sol_mtf_monthly"
+path = "src/sol_mtf_monthly.rs"
+
+[[bin]]
+name = "sol_mtf_recent_sweep"
+path = "src/sol_mtf_recent_sweep.rs"
+
+[[bin]]
+name = "sol_mtf_ifvg_tune"
+path = "src/sol_mtf_ifvg_tune.rs"
+
+[[bin]]
+name = "sol_mtf_high_freq"
+path = "src/sol_mtf_high_freq.rs"
+
+[[bin]]
+name = "pooled_high_freq_eval"
+path = "src/pooled_high_freq_eval.rs"
+
+[[bin]]
+name = "pooled_reverse_check"
+path = "src/pooled_reverse_check.rs"
+
+[[bin]]
+name = "sol_reverse_tuned_check"
+path = "src/sol_reverse_tuned_check.rs"
+
+[[bin]]
+name = "multi_asset_ifvg_tune"
+path = "src/multi_asset_ifvg_tune.rs"
+
+[[bin]]
+name = "deployment_shortlist_eval"
+path = "src/deployment_shortlist_eval.rs"
+
+[[bin]]
+name = "portfolio_combo_sweep"
+path = "src/portfolio_combo_sweep.rs"
+
+[[bin]]
+name = "multi_asset_ifvg_report"
+path = "src/multi_asset_ifvg_report.rs"
+
+[[bin]]
+name = "or_backtest_port"
+path = "src/or_backtest_port.rs"
+
+[[bin]]
+name = "ema_wick_reclaim"
+path = "src/ema_wick_reclaim.rs"
+
+[[bin]]
+name = "ema_wick_reclaim_mnq"
+path = "src/ema_wick_reclaim_mnq.rs"
 
 #[[bin]]
 #name = "trade"
