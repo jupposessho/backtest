@@ -55,6 +55,7 @@ struct RunCfg {
     tick_size: Decimal,
     fee_rt: Decimal,
     slippage_rt: Decimal,
+    cost_filter_slippage_rt: Decimal,
     session: SessionFilter,
     stop_mode: StopMode,
     entry_mode: EntryMode,
@@ -381,7 +382,7 @@ fn run(
             i += 1;
             continue;
         }
-        let cost_r = (cfg.fee_rt + cfg.slippage_rt) / (risk * point_value);
+        let cost_r = (cfg.fee_rt + cfg.cost_filter_slippage_rt) / (risk * point_value);
         if cost_r > cfg.max_cost_r {
             i += 1;
             continue;
@@ -410,8 +411,12 @@ fn run(
                     nx.close.0 < nx.open.0
                 };
                 if touch && confirm {
-                    actual_entry = mid;
-                    entry_idx = j2;
+                    let next_idx = j2 + 1;
+                    if next_idx >= tf.len() {
+                        break;
+                    }
+                    actual_entry = tf[next_idx].open.0;
+                    entry_idx = next_idx;
                     found = true;
                     break;
                 }
@@ -496,6 +501,12 @@ fn run(
             }
             held += 1;
             if held >= cfg.max_hold_bars {
+                pnl_points = (nx.close.0 - actual_entry)
+                    * if direction == PositionDirection::Long {
+                        Decimal::ONE
+                    } else {
+                        -Decimal::ONE
+                    };
                 exit_ts = nx.close_time;
                 break;
             }
@@ -619,6 +630,7 @@ fn main() {
         tick_size: Decimal::new(25, 2),
         fee_rt: Decimal::new(124, 2),
         slippage_rt: Decimal::ONE,
+        cost_filter_slippage_rt: Decimal::ONE,
         session: SessionFilter::All,
         stop_mode: StopMode::Hybrid,
         entry_mode: EntryMode::Immediate,
@@ -999,9 +1011,8 @@ fn main() {
     let max_hold_t = [90usize, 120usize, 150usize];
     let ema_period_t = [200usize, 250usize, 300usize];
 
-    let mut near_1m: Vec<Row> = Vec::new();
-    let mut near_3m: Vec<Row> = Vec::new();
-
+    let mut targeted_cfg_1m: Vec<(String, RunCfg)> = Vec::new();
+    let mut targeted_cfg_3m: Vec<(String, RunCfg, usize)> = Vec::new();
     for rr in rr_t {
         for wk in wick_t {
             for am in atr_t {
@@ -1030,13 +1041,8 @@ fn main() {
                                 };
                                 let sname = match s { SessionFilter::All => "all", SessionFilter::NyAm => "ny", _ => "other" };
                                 let label = format!("1m rr{} wick{} atr{} cap{} obw{} hold{} {}", rr, wk, am, cp, ow, mh, sname);
-                                let t = run(&one_min, &ema_sets[2].1, from_ts, cfg);
-                                let row = evaluate(label, &t);
-                                if row.trades >= 300 && row.win_rate >= Decimal::from(22) {
-                                    near_1m.push(row);
-                                }
+                                targeted_cfg_1m.push((label, cfg));
                             }
-
                             for s in sessions_3m {
                                 for ep in ema_period_t {
                                     let cfg = RunCfg {
@@ -1058,20 +1064,14 @@ fn main() {
                                         use_loss_streak_breaker: false,
                                         ..base
                                     };
-                                    if let Some((_, ema)) = ema_sets.iter().find(|(p, _)| *p == ep) {
-                                        let sname = match s {
-                                            SessionFilter::NyAm => "ny",
-                                            SessionFilter::NyOpen => "ny_open",
-                                            SessionFilter::All => "all",
-                                            _ => "other",
-                                        };
-                                        let label = format!("3m ema{} rr{} wick{} atr{} cap{} obw{} hold{} {}", ep, rr, wk, am, cp, ow, mh, sname);
-                                        let t = run(&three_min, ema, from_ts, cfg);
-                                        let row = evaluate(label, &t);
-                                        if row.trades >= 250 && row.win_rate >= Decimal::from(24) {
-                                            near_3m.push(row);
-                                        }
-                                    }
+                                    let sname = match s {
+                                        SessionFilter::NyAm => "ny",
+                                        SessionFilter::NyOpen => "ny_open",
+                                        SessionFilter::All => "all",
+                                        _ => "other",
+                                    };
+                                    let label = format!("3m ema{} rr{} wick{} atr{} cap{} obw{} hold{} {}", ep, rr, wk, am, cp, ow, mh, sname);
+                                    targeted_cfg_3m.push((label, cfg, ep));
                                 }
                             }
                         }
@@ -1080,6 +1080,40 @@ fn main() {
             }
         }
     }
+
+    let near_1m: Vec<Row> = targeted_cfg_1m
+        .par_iter()
+        .filter_map(|(label, cfg)| {
+            let t = run(one_min_arc.as_slice(), ema200_5m_arc.as_slice(), from_ts, *cfg);
+            let row = evaluate(label.clone(), &t);
+            if row.trades >= 300 && row.win_rate >= Decimal::from(22) {
+                Some(row)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let near_3m: Vec<Row> = targeted_cfg_3m
+        .par_iter()
+        .filter_map(|(label, cfg, ep)| {
+            let ema_opt = ema_sets.iter().find(|(p, _)| p == ep).map(|(_, e)| e);
+            if let Some(ema) = ema_opt {
+                let t = run(three_min_arc.as_slice(), ema.as_slice(), from_ts, *cfg);
+                let row = evaluate(label.clone(), &t);
+                if row.trades >= 250 && row.win_rate >= Decimal::from(24) {
+                    Some(row)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut near_1m = near_1m;
+    let mut near_3m = near_3m;
 
     near_1m.sort_by(|a, b| b.net_usd.partial_cmp(&a.net_usd).unwrap());
     near_3m.sort_by(|a, b| b.net_usd.partial_cmp(&a.net_usd).unwrap());
@@ -1131,8 +1165,7 @@ fn main() {
     let loss_on = [false, true];
     let micro_on = [false, true];
 
-    let mut filt1: Vec<Row> = Vec::new();
-    let mut filt3: Vec<Row> = Vec::new();
+    let mut sel_cfg: Vec<(String, RunCfg, RunCfg)> = Vec::new();
     for ed in ema_d {
         for bp in body_p {
             for rg in rng_t {
@@ -1172,22 +1205,35 @@ fn main() {
                                 if ls { 1 } else { 0 },
                                 if mc { 1 } else { 0 }
                             );
-
-                            let r1 = evaluate(tag.clone(), &run(&one_min, &ema_sets[2].1, from_ts, c1));
-                            if r1.trades >= 300 && r1.win_rate >= base1_row.win_rate && r1.net_usd >= base1_row.net_usd * Decimal::new(85, 2) {
-                                filt1.push(r1);
-                            }
-
-                            let r3 = evaluate(tag, &run(&three_min, &ema_sets[2].1, from_ts, c3));
-                            if r3.trades >= 250 && r3.win_rate >= base3_row.win_rate && r3.net_usd >= base3_row.net_usd * Decimal::new(85, 2) {
-                                filt3.push(r3);
-                            }
+                            sel_cfg.push((tag, c1, c3));
                         }
                     }
                 }
             }
         }
     }
+
+    let filt_rows: Vec<(Option<Row>, Option<Row>)> = sel_cfg
+        .par_iter()
+        .map(|(tag, c1, c3)| {
+            let r1 = evaluate(tag.clone(), &run(one_min_arc.as_slice(), ema200_5m_arc.as_slice(), from_ts, *c1));
+            let r3 = evaluate(tag.clone(), &run(three_min_arc.as_slice(), ema200_5m_arc.as_slice(), from_ts, *c3));
+            let o1 = if r1.trades >= 300 && r1.win_rate >= base1_row.win_rate && r1.net_usd >= base1_row.net_usd * Decimal::new(85, 2) {
+                Some(r1)
+            } else {
+                None
+            };
+            let o3 = if r3.trades >= 250 && r3.win_rate >= base3_row.win_rate && r3.net_usd >= base3_row.net_usd * Decimal::new(85, 2) {
+                Some(r3)
+            } else {
+                None
+            };
+            (o1, o3)
+        })
+        .collect();
+
+    let mut filt1: Vec<Row> = filt_rows.iter().filter_map(|(a, _)| a.clone()).collect();
+    let mut filt3: Vec<Row> = filt_rows.iter().filter_map(|(_, b)| b.clone()).collect();
 
     filt1.sort_by(|a, b| b.net_usd.partial_cmp(&a.net_usd).unwrap());
     filt3.sort_by(|a, b| b.net_usd.partial_cmp(&a.net_usd).unwrap());
@@ -1199,4 +1245,28 @@ fn main() {
     for r in filt3.iter().take(10) {
         println!("{} | trades={} | win={}%, net=${}, avg=${}", r.label, r.trades, r.win_rate.round_dp(2), r.net_usd.round_dp(2), r.avg_usd.round_dp(2));
     }
+
+    println!("\n===== Monthly Breakdown: Current Best Post-Fix 3m =====");
+    let current_best_3m = RunCfg {
+        rr: Decimal::from(2),
+        min_wick_ticks: Decimal::from(8),
+        atr_floor_mult: Decimal::new(5, 1),
+        max_cost_r: Decimal::new(10, 2),
+        session: SessionFilter::All,
+        stop_mode: StopMode::Atr,
+        entry_mode: EntryMode::ObMidRetest,
+        ob_wait_bars: 8,
+        max_hold_bars: 120,
+        use_regime_filter: false,
+        require_micro_confirm: false,
+        use_dynamic_rr: false,
+        use_ema_distance_filter: false,
+        use_candle_quality_filter: false,
+        use_trend_structure_filter: false,
+        use_loss_streak_breaker: false,
+        ..base
+    };
+    let t_best_3m = run(&three_min, &ema_sets[2].1, from_ts, current_best_3m);
+    print_stats("CURRENT BEST 3m (post-fix)", &t_best_3m);
+    monthly_breakdown("CURRENT BEST 3m (post-fix)", &t_best_3m);
 }
