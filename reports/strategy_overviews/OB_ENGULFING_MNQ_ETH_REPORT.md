@@ -88,3 +88,36 @@ Criteria: OOS PF>=1.20 and OOS profit_r>0 in >=4/5 windows.
 - W3: trades=67 profit_r=28.99 pf_r=1.78 pnl%=32.27
 - W4: trades=43 profit_r=4.99 pf_r=1.18 pnl%=4.50
 - W5: trades=48 profit_r=12.79 pf_r=1.44 pnl%=12.86
+
+## MNQ 15m 2025+ Winner (Current)
+
+- Scope: overlap-any-prior same-direction OB, entry `PrevOpen`, session `05:00-09:15` NY.
+- Best tuned config: overlap `>=5%`, `RR=3.5`, max risk cap `25` points, fill window `8`, max setups/day `2`, trailing `none`.
+- Gross performance (1 MNQ micro, $2/point): trades `191`, win `29.84%`, points `3603.25`, net `+$7206.50`.
+
+## MNQ 15m Robustness Split (Current Winner)
+
+- FULL: trades `191`, win `29.84%`, points `3603.25`, usd `+7206.50`.
+- CHUNK_1: trades `35`, win `34.29%`, points `1269.00`, usd `+2538.00`.
+- CHUNK_2: trades `38`, win `31.58%`, points `149.12`, usd `+298.24`.
+- CHUNK_3: trades `39`, win `23.08%`, points `1156.00`, usd `+2312.00`.
+- CHUNK_4: trades `50`, win `32.00%`, points `-355.00`, usd `-710.00`.
+
+## Session Buckets (MNQ 15m)
+
+Config used: `PrevOpen`, overlap `>=10%`, `RR=3`, cap `25`, fill `8`, max/day `2`.
+
+- `02:00-06:00`: trades `196`, win `25.00%`, points `-1523.00`, usd `-3046.00`.
+- `06:00-09:15`: trades `142`, win `31.69%`, points `2330.00`, usd `4660.00`.
+- `10:00-13:00`: trades `86`, win `29.07%`, points `-732.25`, usd `-1464.50`.
+- `14:00-16:00`: trades `63`, win `33.33%`, points `345.75`, usd `691.50`.
+
+## Realism Validation (Current Winner)
+
+Run with commission proxy `0.005%` per side and slippage `1/2/3` ticks per side (`tick=0.25`).
+
+- `1 tick`: trades `191`, gross points `3603.25`, costs `540.37`, net pnl `%` `+6.36`.
+- `2 ticks`: trades `191`, gross points `3571.87`, costs `635.87`, net pnl `%` `-8.59`.
+- `3 ticks`: trades `191`, gross points `3474.12`, costs `731.37`, net pnl `%` `-26.52`.
+
+Verdict: execution-fragile; survives at 1 tick, fails at 2/3 ticks.

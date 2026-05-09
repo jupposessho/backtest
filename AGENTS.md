@@ -70,3 +70,16 @@
 - Always load the installed skill `backtesting-implementation` at the start of any backtesting/model-validation task.
 - Use it as the default operating checklist for sweeps, promotion gates, reporting, and fast/full loop discipline.
 - Detailed reference guide path: `reports/strategy_overviews/BACKTESTING_IMPLEMENTATION_GUIDE.md`.
+
+## Realism Validation Protocol (Mandatory)
+
+- For every backtest implementation/tuning task, apply `REALISM_VALIDATION.md` as a hard gate before accepting results.
+- Treat the local skill file `.agents/skills/realism-validation/SKILL.md` as the execution checklist.
+- Minimum realism requirements for all future runs:
+  - include fees/commission,
+  - include slippage sensitivity (1/2/3 ticks per side),
+  - report gross vs net,
+  - handle gap-through stop fills realistically,
+  - prefer or benchmark against realistic entry timing (next-bar-open style baseline),
+  - include data integrity checks and a realism verdict block.
+- Do not label a variant as promoted/final if it fails realism gates.
