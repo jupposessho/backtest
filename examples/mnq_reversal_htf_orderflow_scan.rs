@@ -4,6 +4,8 @@ use backtest::{
 };
 use chrono::{TimeZone, Timelike};
 use chrono_tz::America::New_York;
+use rayon::prelude::*;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Side {
@@ -37,12 +39,13 @@ enum Pattern {
     CisdLastSeriesCloseBreak,
     Ifvg,
     Ob,
-    MssOnly,
-    MssCisdBodyFlip,
-    MssCisdStrictWickBreak,
-    MssCisdLastSeriesCloseBreak,
-    MssIfvg,
-    MssOb,
+}
+
+#[derive(Clone, Copy)]
+enum BiasMode {
+    None,
+    Ema200,
+    Structure,
 }
 
 fn d2f(d: rust_decimal::Decimal) -> f64 {
@@ -81,6 +84,21 @@ fn resample(bars: &[MiniCandle], minutes: i64) -> Vec<MiniCandle> {
             close,
         });
         i = j;
+    }
+    out
+}
+
+fn ema(vals: &[f64], p: usize) -> Vec<f64> {
+    if vals.is_empty() {
+        return vec![];
+    }
+    let k = 2.0 / (p as f64 + 1.0);
+    let mut out = Vec::with_capacity(vals.len());
+    let mut e = vals[0];
+    out.push(e);
+    for v in vals.iter().skip(1) {
+        e = *v * k + e * (1.0 - k);
+        out.push(e);
     }
     out
 }
@@ -141,7 +159,6 @@ fn collect_days(candles: &[CandleStick]) -> Vec<DayData> {
                 continue;
             }
             if b.high >= rh {
-                // Wick-only sweep: must close back inside the 6-9 range.
                 if b.close <= rh {
                     sweep = Some((Side::HighSweep, b.ts));
                     break;
@@ -150,7 +167,6 @@ fn collect_days(candles: &[CandleStick]) -> Vec<DayData> {
                 break;
             }
             if b.low <= rl {
-                // Wick-only sweep: must close back inside the 6-9 range.
                 if b.close >= rl {
                     sweep = Some((Side::LowSweep, b.ts));
                     break;
@@ -164,7 +180,6 @@ fn collect_days(candles: &[CandleStick]) -> Vec<DayData> {
             i = j;
             continue;
         }
-
         if let Some((side, ts)) = sweep {
             out.push(DayData {
                 range_high: rh,
@@ -179,53 +194,20 @@ fn collect_days(candles: &[CandleStick]) -> Vec<DayData> {
     out
 }
 
-fn find_mss_idx(bars: &[MiniCandle], side: Side, start_idx: usize) -> Option<usize> {
-    if bars.len() < 3 || start_idx >= bars.len() {
-        return None;
-    }
-    let mut last_pivot = None;
-    for i in (start_idx + 1)..(bars.len() - 1) {
-        if side == Side::HighSweep {
-            if bars[i].low < bars[i - 1].low && bars[i].low < bars[i + 1].low {
-                last_pivot = Some(bars[i].low);
-            }
-            if let Some(p) = last_pivot {
-                let body = (bars[i].close - bars[i].open).abs();
-                let range = (bars[i].high - bars[i].low).max(0.0001);
-                if bars[i].close < p && body / range >= 0.45 {
-                    return Some(i);
-                }
-            }
-        } else {
-            if bars[i].high > bars[i - 1].high && bars[i].high > bars[i + 1].high {
-                last_pivot = Some(bars[i].high);
-            }
-            if let Some(p) = last_pivot {
-                let body = (bars[i].close - bars[i].open).abs();
-                let range = (bars[i].high - bars[i].low).max(0.0001);
-                if bars[i].close > p && body / range >= 0.45 {
-                    return Some(i);
-                }
-            }
-        }
-    }
-    None
-}
-
 fn find_cisd_body_flip_idx(bars: &[MiniCandle], side: Side, start_idx: usize) -> Option<usize> {
     for i in (start_idx + 1)..bars.len() {
         if side == Side::HighSweep {
-            let prev_bull = bars[i - 1].close > bars[i - 1].open;
-            let curr_bear = bars[i].close < bars[i].open;
-            if prev_bull && curr_bear && bars[i].close < bars[i - 1].close {
+            if bars[i - 1].close > bars[i - 1].open
+                && bars[i].close < bars[i].open
+                && bars[i].close < bars[i - 1].close
+            {
                 return Some(i);
             }
-        } else {
-            let prev_bear = bars[i - 1].close < bars[i - 1].open;
-            let curr_bull = bars[i].close > bars[i].open;
-            if prev_bear && curr_bull && bars[i].close > bars[i - 1].close {
-                return Some(i);
-            }
+        } else if bars[i - 1].close < bars[i - 1].open
+            && bars[i].close > bars[i].open
+            && bars[i].close > bars[i - 1].close
+        {
+            return Some(i);
         }
     }
     None
@@ -310,10 +292,10 @@ fn find_ob_idx(bars: &[MiniCandle], side: Side, start_idx: usize) -> Option<usiz
     }
     for i in (1..=start_idx).rev() {
         if side == Side::HighSweep {
-            if bars[i].close > bars[i].open && (bars[start_idx].close < bars[i].low) {
+            if bars[i].close > bars[i].open && bars[start_idx].close < bars[i].low {
                 return Some(i);
             }
-        } else if bars[i].close < bars[i].open && (bars[start_idx].close > bars[i].high) {
+        } else if bars[i].close < bars[i].open && bars[start_idx].close > bars[i].high {
             return Some(i);
         }
     }
@@ -326,9 +308,7 @@ fn pattern_entry_idx(
     p: Pattern,
     sweep_idx: usize,
 ) -> Option<usize> {
-    let mss = find_mss_idx(bars, side, sweep_idx);
     match p {
-        Pattern::MssOnly => mss,
         Pattern::CisdBodyFlip => find_cisd_body_flip_idx(bars, side, sweep_idx),
         Pattern::CisdStrictWickBreak => find_cisd_strict_wick_break_idx(bars, side, sweep_idx),
         Pattern::CisdLastSeriesCloseBreak => {
@@ -336,15 +316,65 @@ fn pattern_entry_idx(
         }
         Pattern::Ifvg => find_ifvg_idx(bars, side, sweep_idx),
         Pattern::Ob => find_ob_idx(bars, side, sweep_idx),
-        Pattern::MssCisdBodyFlip => mss.and_then(|m| find_cisd_body_flip_idx(bars, side, m)),
-        Pattern::MssCisdStrictWickBreak => {
-            mss.and_then(|m| find_cisd_strict_wick_break_idx(bars, side, m))
+    }
+}
+
+fn htf_bias(htf: &[MiniCandle], sweep_ts: i64, mode: BiasMode) -> Option<bool> {
+    if matches!(mode, BiasMode::None) {
+        return Some(true);
+    }
+    let idx = htf.iter().position(|b| b.ts >= sweep_ts)?;
+    match mode {
+        BiasMode::None => Some(true),
+        BiasMode::Ema200 => {
+            if idx < 210 {
+                return None;
+            }
+            let closes: Vec<f64> = htf.iter().map(|b| b.close).collect();
+            let e = ema(&closes, 200);
+            if idx == 0 {
+                return None;
+            }
+            let bull = htf[idx].close > e[idx] && e[idx] > e[idx - 1];
+            let bear = htf[idx].close < e[idx] && e[idx] < e[idx - 1];
+            if bull {
+                Some(true)
+            } else if bear {
+                Some(false)
+            } else {
+                None
+            }
         }
-        Pattern::MssCisdLastSeriesCloseBreak => {
-            mss.and_then(|m| find_cisd_last_series_close_break_idx(bars, side, m))
+        BiasMode::Structure => {
+            if idx < 10 {
+                return None;
+            }
+            let upto = &htf[..=idx];
+            let mut swing_highs: Vec<f64> = Vec::new();
+            let mut swing_lows: Vec<f64> = Vec::new();
+            for i in 1..upto.len().saturating_sub(1) {
+                if upto[i].high > upto[i - 1].high && upto[i].high > upto[i + 1].high {
+                    swing_highs.push(upto[i].high);
+                }
+                if upto[i].low < upto[i - 1].low && upto[i].low < upto[i + 1].low {
+                    swing_lows.push(upto[i].low);
+                }
+            }
+            if swing_highs.len() < 2 || swing_lows.len() < 2 {
+                return None;
+            }
+            let hh = swing_highs[swing_highs.len() - 1] > swing_highs[swing_highs.len() - 2];
+            let hl = swing_lows[swing_lows.len() - 1] > swing_lows[swing_lows.len() - 2];
+            let lh = swing_highs[swing_highs.len() - 1] < swing_highs[swing_highs.len() - 2];
+            let ll = swing_lows[swing_lows.len() - 1] < swing_lows[swing_lows.len() - 2];
+            if hh && hl {
+                Some(true)
+            } else if lh && ll {
+                Some(false)
+            } else {
+                None
+            }
         }
-        Pattern::MssIfvg => mss.and_then(|m| find_ifvg_idx(bars, side, m)),
-        Pattern::MssOb => mss.and_then(|m| find_ob_idx(bars, side, m)),
     }
 }
 
@@ -356,6 +386,8 @@ fn simulate(
     tstop_hour: u32,
     slip_ticks: i32,
     comm_rt_pts: f64,
+    bias_mode: BiasMode,
+    htf_minutes: i64,
 ) -> Option<f64> {
     let tick = 0.25;
     let slip = slip_ticks as f64 * tick;
@@ -365,6 +397,20 @@ fn simulate(
         resample(&day.bars_1m, tf)
     };
     if bars.len() < 10 {
+        return None;
+    }
+
+    let bias_ok = if matches!(bias_mode, BiasMode::None) {
+        true
+    } else {
+        let htf = resample(&day.bars_1m, htf_minutes);
+        let bias = htf_bias(&htf, day.sweep_ts, bias_mode)?;
+        match day.sweep_side {
+            Side::LowSweep => bias,
+            Side::HighSweep => !bias,
+        }
+    };
+    if !bias_ok {
         return None;
     }
 
@@ -424,76 +470,55 @@ fn simulate(
     Some(-0.1 - cost_r)
 }
 
+fn pattern_name(p: Pattern) -> &'static str {
+    match p {
+        Pattern::CisdBodyFlip => "cisd_bodyflip",
+        Pattern::CisdStrictWickBreak => "cisd_strictwick",
+        Pattern::CisdLastSeriesCloseBreak => "cisd_lastclose",
+        Pattern::Ifvg => "ifvg",
+        Pattern::Ob => "ob",
+    }
+}
+
+fn bias_name(b: BiasMode) -> &'static str {
+    match b {
+        BiasMode::None => "baseline",
+        BiasMode::Ema200 => "htf_ema200",
+        BiasMode::Structure => "htf_structure",
+    }
+}
+
 fn main() {
     let candles =
         CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
             .expect("load parquet");
-    let days = collect_days(&candles);
+    let days = Arc::new(collect_days(&candles));
 
     let tfs = [15_i64, 5, 3, 1];
     let patterns = [
-        Pattern::MssOnly,
         Pattern::CisdBodyFlip,
         Pattern::CisdStrictWickBreak,
         Pattern::CisdLastSeriesCloseBreak,
         Pattern::Ifvg,
         Pattern::Ob,
-        Pattern::MssCisdBodyFlip,
-        Pattern::MssCisdStrictWickBreak,
-        Pattern::MssCisdLastSeriesCloseBreak,
-        Pattern::MssIfvg,
-        Pattern::MssOb,
     ];
     let rrs = [1.0_f64, 1.5, 2.0];
     let t_stops = [11_u32, 12_u32];
     let slips = [0_i32, 1_i32];
     let comms = [0.25_f64, 0.5_f64];
+    let bias_modes = [BiasMode::None, BiasMode::Ema200, BiasMode::Structure];
+    let htf_minutes = 60_i64;
 
-    let mut rows: Vec<(String, usize, f64, f64)> = Vec::new();
-
+    let mut jobs = Vec::new();
     for tf in tfs {
         for p in patterns {
             for rr in rrs {
                 for ts in t_stops {
                     for slip in slips {
                         for comm in comms {
-                            let mut vals = Vec::new();
-                            let mut wins = 0usize;
-                            for d in &days {
-                                if let Some(r) = simulate(d, tf, p, rr, ts, slip, comm) {
-                                    if r > 0.0 {
-                                        wins += 1;
-                                    }
-                                    vals.push(r);
-                                }
+                            for bias in bias_modes {
+                                jobs.push((tf, p, rr, ts, slip, comm, bias));
                             }
-                            if vals.len() < 80 {
-                                continue;
-                            }
-                            let exp = vals.iter().sum::<f64>() / vals.len() as f64;
-                            let wr = wins as f64 / vals.len() as f64 * 100.0;
-                            let pn = match p {
-                                Pattern::MssOnly => "mss",
-                                Pattern::CisdBodyFlip => "cisd_bodyflip",
-                                Pattern::CisdStrictWickBreak => "cisd_strictwick",
-                                Pattern::CisdLastSeriesCloseBreak => "cisd_lastclose",
-                                Pattern::Ifvg => "ifvg",
-                                Pattern::Ob => "ob",
-                                Pattern::MssCisdBodyFlip => "mss+cisd_bodyflip",
-                                Pattern::MssCisdStrictWickBreak => "mss+cisd_strictwick",
-                                Pattern::MssCisdLastSeriesCloseBreak => "mss+cisd_lastclose",
-                                Pattern::MssIfvg => "mss+ifvg",
-                                Pattern::MssOb => "mss+ob",
-                            };
-                            rows.push((
-                                format!(
-                                    "tf={}m pattern={} rr={:.1} tstop={} slip={} comm={:.2}",
-                                    tf, pn, rr, ts, slip, comm
-                                ),
-                                vals.len(),
-                                wr,
-                                exp,
-                            ));
                         }
                     }
                 }
@@ -501,36 +526,61 @@ fn main() {
         }
     }
 
+    let mut rows: Vec<(String, usize, f64, f64)> = jobs
+        .par_iter()
+        .filter_map(|(tf, p, rr, ts, slip, comm, bias)| {
+            let mut vals = Vec::new();
+            let mut wins = 0usize;
+            for d in days.iter() {
+                if let Some(r) = simulate(d, *tf, *p, *rr, *ts, *slip, *comm, *bias, htf_minutes) {
+                    if r > 0.0 {
+                        wins += 1;
+                    }
+                    vals.push(r);
+                }
+            }
+            if vals.len() < 30 {
+                return None;
+            }
+            let exp = vals.iter().sum::<f64>() / vals.len() as f64;
+            let wr = wins as f64 / vals.len() as f64 * 100.0;
+            Some((
+                format!(
+                    "tf={}m pattern={} bias={} rr={:.1} tstop={} slip={} comm={:.2}",
+                    tf,
+                    pattern_name(*p),
+                    bias_name(*bias),
+                    rr,
+                    ts,
+                    slip,
+                    comm
+                ),
+                vals.len(),
+                wr,
+                exp,
+            ))
+        })
+        .collect();
+
     rows.sort_by(|a, b| b.3.total_cmp(&a.3).then(b.2.total_cmp(&a.2)));
 
-    let families = [
-        ("cisd_bodyflip", "mss+cisd_bodyflip"),
-        ("cisd_strictwick", "mss+cisd_strictwick"),
-        ("cisd_lastclose", "mss+cisd_lastclose"),
-        ("ifvg", "mss+ifvg"),
-        ("ob", "mss+ob"),
-    ];
-
-    let best_for = |needle: &str| -> Option<&(String, usize, f64, f64)> {
-        rows.iter()
-            .find(|r| r.0.contains(&format!("pattern={needle} ")))
-    };
-
-    println!("MNQ MTF reversal pattern scan (post 6-9 NY sweep)");
+    println!("MNQ reversal scan with wick-only sweep + HTF orderflow gating");
     println!("Days: {}", days.len());
-    println!("\nBest by family (NO MSS vs MSS-gated):");
-    for (base, gated) in families {
-        let left = best_for(base);
-        let right = best_for(gated);
-        if let Some(l) = left {
-            println!("- {} | trades={} wr={:.2}% exp={:.3}R", l.0, l.1, l.2, l.3);
-        }
-        if let Some(r) = right {
-            println!("  {} | trades={} wr={:.2}% exp={:.3}R", r.0, r.1, r.2, r.3);
+    println!("HTF bias timeframe: {}m", htf_minutes);
+    println!("\nBest by pattern and bias mode:");
+    for p in patterns {
+        println!("- pattern={}", pattern_name(p));
+        for bias in bias_modes {
+            if let Some(r) = rows.iter().find(|r| {
+                r.0.contains(&format!("pattern={} ", pattern_name(p)))
+                    && r.0.contains(&format!("bias={} ", bias_name(bias)))
+            }) {
+                println!("  {} | trades={} wr={:.2}% exp={:.3}R", r.0, r.1, r.2, r.3);
+            }
         }
     }
 
-    println!("Top results:");
+    println!("\nTop results:");
     for r in rows.iter().take(30) {
         println!(
             "- {} | trades={} win_rate={:.2}% exp={:.3}R",
