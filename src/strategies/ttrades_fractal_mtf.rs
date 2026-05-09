@@ -2,6 +2,7 @@ use chrono::{Datelike, Timelike};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 
+use crate::engine::types::ExecutionConfig;
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -12,14 +13,13 @@ use crate::model::trade::Trade;
 use crate::model::trade_result::TradeResult;
 use crate::model::trading_model::TradingModel;
 use crate::to_new_york_time;
-use crate::engine::types::ExecutionConfig;
 use std::sync::Arc;
 
 /// TTrades Fractal Model - Multi-Timeframe Implementation
 /// Higher timeframe for bias/structure, lower timeframe for entry
 pub struct TTradesFractalMTF {
-    pub htf_data: Arc<Vec<CandleStick>>,  // Higher timeframe (1h, 4h)
-    pub ltf_data: Arc<Vec<CandleStick>>,  // Lower timeframe (5m, 15m)
+    pub htf_data: Arc<Vec<CandleStick>>, // Higher timeframe (1h, 4h)
+    pub ltf_data: Arc<Vec<CandleStick>>, // Lower timeframe (5m, 15m)
     pub config: FractalMTFConfig,
 }
 
@@ -27,8 +27,8 @@ pub struct TTradesFractalMTF {
 pub struct FractalMTFConfig {
     pub rr_target: Decimal,
     pub fee_config: FeeConfig,
-    pub htf_name: &'static str,  // For display: "4h", "1h"
-    pub ltf_name: &'static str,  // For display: "15m", "5m"
+    pub htf_name: &'static str, // For display: "4h", "1h"
+    pub ltf_name: &'static str, // For display: "15m", "5m"
     pub slippage_ticks_per_side: i32,
     pub tick_size: Decimal,
     pub log_progress: bool,
@@ -105,8 +105,8 @@ enum HTFBias {
 #[derive(Debug, Clone)]
 struct HTFSetup {
     bias: HTFBias,
-    poi_high: DecimalVec,  // Point of interest high
-    poi_low: DecimalVec,   // Point of interest low
+    poi_high: DecimalVec, // Point of interest high
+    poi_low: DecimalVec,  // Point of interest low
     swing_high: DecimalVec,
     swing_low: DecimalVec,
     start_time: i64,
@@ -257,9 +257,9 @@ impl TTradesFractalMTF {
             HTFBias::Bearish
         } else {
             // Check close position relative to previous candles
-            let bullish_closes = (current.close > current.open) as i32 +
-                                (prev1.close > prev1.open) as i32 +
-                                (prev2.close > prev2.open) as i32;
+            let bullish_closes = (current.close > current.open) as i32
+                + (prev1.close > prev1.open) as i32
+                + (prev2.close > prev2.open) as i32;
 
             if bullish_closes >= 2 {
                 HTFBias::Bullish
@@ -370,8 +370,14 @@ impl TTradesFractalMTF {
             (fvg.high, fvg.low)
         } else {
             match bias {
-                HTFBias::Bullish => (swing_low, swing_low - DecimalVec(swing_low.0 * Decimal::from_f32(0.0025).unwrap())),
-                HTFBias::Bearish => (swing_high + DecimalVec(swing_high.0 * Decimal::from_f32(0.0025).unwrap()), swing_high),
+                HTFBias::Bullish => (
+                    swing_low,
+                    swing_low - DecimalVec(swing_low.0 * Decimal::from_f32(0.0025).unwrap()),
+                ),
+                HTFBias::Bearish => (
+                    swing_high + DecimalVec(swing_high.0 * Decimal::from_f32(0.0025).unwrap()),
+                    swing_high,
+                ),
                 HTFBias::None => return None,
             }
         };
@@ -483,7 +489,11 @@ impl TTradesFractalMTF {
     }
 
     /// Detect continuation order block on LTF
-    fn detect_ltf_order_block(&self, ltf_index: usize, direction: PositionDirection) -> Option<DecimalVec> {
+    fn detect_ltf_order_block(
+        &self,
+        ltf_index: usize,
+        direction: PositionDirection,
+    ) -> Option<DecimalVec> {
         if ltf_index < 5 {
             return None;
         }
@@ -582,7 +592,9 @@ impl TradingModel for TTradesFractalMTF {
 
             // Find LTF candles within this HTF candle's time range
             let ltf_start = ltf_index;
-            while ltf_index < self.ltf_data.len() && self.ltf_data[ltf_index].open_time < next_htf_time {
+            while ltf_index < self.ltf_data.len()
+                && self.ltf_data[ltf_index].open_time < next_htf_time
+            {
                 let ltf_candle = self.ltf_data[ltf_index];
 
                 if position.is_none() {
@@ -591,7 +603,8 @@ impl TradingModel for TTradesFractalMTF {
                             if ltf_index > p.expiry_index {
                                 pending = None;
                             } else {
-                                let touched = ltf_candle.low <= p.entry && ltf_candle.high >= p.entry;
+                                let touched =
+                                    ltf_candle.low <= p.entry && ltf_candle.high >= p.entry;
                                 if touched {
                                     let immediate_stop = match p.direction {
                                         PositionDirection::Long => ltf_candle.low <= p.sl,
@@ -691,19 +704,29 @@ impl TradingModel for TTradesFractalMTF {
 
                             match setup.bias {
                                 HTFBias::Bullish => {
-                                    let cisd_match = self.detect_ltf_cisd(ltf_index, PositionDirection::Long);
-                                    let ifvg_match = self.has_ifvg_confirmation(ltf_index, PositionDirection::Long);
+                                    let cisd_match =
+                                        self.detect_ltf_cisd(ltf_index, PositionDirection::Long);
+                                    let ifvg_match = self
+                                        .has_ifvg_confirmation(ltf_index, PositionDirection::Long);
                                     if self.reversal_confirmed(cisd_match, ifvg_match) {
                                         cisd_matches += 1;
-                                        if let Some(ob_level) = self.detect_ltf_order_block(ltf_index, PositionDirection::Long) {
+                                        if let Some(ob_level) = self.detect_ltf_order_block(
+                                            ltf_index,
+                                            PositionDirection::Long,
+                                        ) {
                                             order_blocks += 1;
                                             // Create long position
-                                            let entry = self.select_entry(ltf_candle.close, ob_level);
-                                            let sl = ob_level - DecimalVec(ob_level.0 * Decimal::from_f32(0.0005).unwrap());
+                                            let entry =
+                                                self.select_entry(ltf_candle.close, ob_level);
+                                            let sl = ob_level
+                                                - DecimalVec(
+                                                    ob_level.0 * Decimal::from_f32(0.0005).unwrap(),
+                                                );
                                             let risk = entry - sl;
 
                                             if risk.0 > Decimal::ZERO {
-                                                let tp = entry + DecimalVec(risk.0 * self.config.rr_target);
+                                                let tp = entry
+                                                    + DecimalVec(risk.0 * self.config.rr_target);
 
                                                 if self.is_limit_variant() {
                                                     pending = Some(PendingLimitOrder {
@@ -731,19 +754,29 @@ impl TradingModel for TTradesFractalMTF {
                                     }
                                 }
                                 HTFBias::Bearish => {
-                                    let cisd_match = self.detect_ltf_cisd(ltf_index, PositionDirection::Short);
-                                    let ifvg_match = self.has_ifvg_confirmation(ltf_index, PositionDirection::Short);
+                                    let cisd_match =
+                                        self.detect_ltf_cisd(ltf_index, PositionDirection::Short);
+                                    let ifvg_match = self
+                                        .has_ifvg_confirmation(ltf_index, PositionDirection::Short);
                                     if self.reversal_confirmed(cisd_match, ifvg_match) {
                                         cisd_matches += 1;
-                                        if let Some(ob_level) = self.detect_ltf_order_block(ltf_index, PositionDirection::Short) {
+                                        if let Some(ob_level) = self.detect_ltf_order_block(
+                                            ltf_index,
+                                            PositionDirection::Short,
+                                        ) {
                                             order_blocks += 1;
                                             // Create short position
-                                            let entry = self.select_entry(ltf_candle.close, ob_level);
-                                            let sl = ob_level + DecimalVec(ob_level.0 * Decimal::from_f32(0.0005).unwrap());
+                                            let entry =
+                                                self.select_entry(ltf_candle.close, ob_level);
+                                            let sl = ob_level
+                                                + DecimalVec(
+                                                    ob_level.0 * Decimal::from_f32(0.0005).unwrap(),
+                                                );
                                             let risk = sl - entry;
 
                                             if risk.0 > Decimal::ZERO {
-                                                let tp = entry - DecimalVec(risk.0 * self.config.rr_target);
+                                                let tp = entry
+                                                    - DecimalVec(risk.0 * self.config.rr_target);
 
                                                 if self.is_limit_variant() {
                                                     pending = Some(PendingLimitOrder {

@@ -2,6 +2,7 @@ use chrono::{Datelike, NaiveDate, Timelike};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 
+use crate::engine::types::ExecutionConfig;
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -12,7 +13,6 @@ use crate::model::trade::Trade;
 use crate::model::trade_result::TradeResult;
 use crate::model::trading_model::TradingModel;
 use crate::to_new_york_time;
-use crate::engine::types::ExecutionConfig;
 use std::sync::Arc;
 
 /// TTrades Fractal Model Strategy
@@ -262,7 +262,8 @@ impl TTradesFractal {
                     }
                 }
                 // Need at least 2-3 bearish candles before, then bullish reversal
-                consecutive_count >= 2 && self.data[current_index].close > self.data[current_index].open
+                consecutive_count >= 2
+                    && self.data[current_index].close > self.data[current_index].open
             }
             PositionDirection::Short => {
                 // Looking for bearish CISD: previously bullish, now turning bearish
@@ -272,7 +273,8 @@ impl TTradesFractal {
                     }
                 }
                 // Need at least 2-3 bullish candles before, then bearish reversal
-                consecutive_count >= 2 && self.data[current_index].close < self.data[current_index].open
+                consecutive_count >= 2
+                    && self.data[current_index].close < self.data[current_index].open
             }
         }
     }
@@ -289,10 +291,8 @@ impl TTradesFractal {
         }
 
         let current = self.data[current_index];
-        let swing_points = self.detect_swing_points(
-            current_index.saturating_sub(10),
-            current_index,
-        );
+        let swing_points =
+            self.detect_swing_points(current_index.saturating_sub(10), current_index);
 
         match direction {
             PositionDirection::Long => {
@@ -460,7 +460,9 @@ impl TradingModel for TTradesFractal {
 
                         // Check for swing low nearby
                         let near_swing_low = swing_points.iter().rev().find(|s| {
-                            !s.is_high && (actual.close.0 - s.price.0).abs() < (s.price.0 * Decimal::from_f32(0.01).unwrap())
+                            !s.is_high
+                                && (actual.close.0 - s.price.0).abs()
+                                    < (s.price.0 * Decimal::from_f32(0.01).unwrap())
                         });
 
                         if in_fvg.is_some() || near_swing_low.is_some() {
@@ -473,10 +475,13 @@ impl TradingModel for TTradesFractal {
 
                             if cisd_confirmed {
                                 // Check for continuation order block
-                                if let Some(ob_level) = self.detect_continuation_order_block(ind, PositionDirection::Long) {
+                                if let Some(ob_level) = self
+                                    .detect_continuation_order_block(ind, PositionDirection::Long)
+                                {
                                     // Entry signal confirmed - create position
                                     let entry = actual.close;
-                                    let sl = ob_level - DecimalVec(Decimal::from_f32(0.0001).unwrap()); // Just below order block
+                                    let sl =
+                                        ob_level - DecimalVec(Decimal::from_f32(0.0001).unwrap()); // Just below order block
                                     let risk = entry - sl;
                                     let tp = entry + DecimalVec(risk.0 * self.config.rr_target);
 
@@ -504,7 +509,9 @@ impl TradingModel for TTradesFractal {
 
                         // Check for swing high nearby
                         let near_swing_high = swing_points.iter().rev().find(|s| {
-                            s.is_high && (actual.close.0 - s.price.0).abs() < (s.price.0 * Decimal::from_f32(0.01).unwrap())
+                            s.is_high
+                                && (actual.close.0 - s.price.0).abs()
+                                    < (s.price.0 * Decimal::from_f32(0.01).unwrap())
                         });
 
                         if in_fvg.is_some() || near_swing_high.is_some() {
@@ -517,10 +524,13 @@ impl TradingModel for TTradesFractal {
 
                             if cisd_confirmed {
                                 // Check for continuation order block
-                                if let Some(ob_level) = self.detect_continuation_order_block(ind, PositionDirection::Short) {
+                                if let Some(ob_level) = self
+                                    .detect_continuation_order_block(ind, PositionDirection::Short)
+                                {
                                     // Entry signal confirmed - create position
                                     let entry = actual.close;
-                                    let sl = ob_level + DecimalVec(Decimal::from_f32(0.0001).unwrap()); // Just above order block
+                                    let sl =
+                                        ob_level + DecimalVec(Decimal::from_f32(0.0001).unwrap()); // Just above order block
                                     let risk = sl - entry;
                                     let tp = entry - DecimalVec(risk.0 * self.config.rr_target);
 

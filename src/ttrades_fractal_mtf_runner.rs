@@ -7,24 +7,20 @@ use std::sync::Arc;
 use backtest::{
     candle_stick_loader::CandleStickLoader,
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
-    strategies::ttrades_fractal_mtf::{FractalMTFConfig, TTradesFractalMTF},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
+    strategies::ttrades_fractal_mtf::{
+        EntryVariant, FractalMTFConfig, ReversalConfirmMode, TTradesFractalMTF,
+    },
 };
 
-fn load_binance_5m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_5m.json"))
+fn load_sol_15m() -> Vec<CandleStick> {
+    CandleStickLoader::load_binance(include_str!("../assets/binance_SOLUSDT_15m.json"))
 }
 
-fn load_binance_15m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_15m.json"))
-}
-
-fn load_binance_1h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_1h.json"))
-}
-
-fn load_binance_4h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_4h.json"))
+fn load_sol_4h() -> Vec<CandleStick> {
+    CandleStickLoader::load_binance(include_str!("../assets/binance_SOLUSDT_4h.json"))
 }
 
 fn print_stats(name: &str, result: &BacktestResult) {
@@ -51,13 +47,7 @@ fn print_stats(name: &str, result: &BacktestResult) {
 }
 
 fn main() {
-    let matches = Command::new("TTrades Fractal MTF Runner")
-        .arg(
-            Arg::new("source")
-                .long("source")
-                .value_parser(["btc_5m_1h", "btc_15m_4h"])
-                .default_value("btc_15m_4h"),
-        )
+    let matches = Command::new("TTrades Fractal MTF Runner (Champion)")
         .arg(
             Arg::new("rr")
                 .long("rr")
@@ -72,18 +62,12 @@ fn main() {
         )
         .get_matches();
 
-    let source = matches
-        .get_one::<String>("source")
-        .map(|s| s.as_str())
-        .unwrap_or("btc_15m_4h");
     let rr_raw = *matches.get_one::<u32>("rr").unwrap_or(&2);
     let max_bars = matches.get_one::<usize>("max-bars").copied();
 
-    let (mut ltf_data, mut htf_data, htf_name, ltf_name) = match source {
-        "btc_5m_1h" => (load_binance_5m(), load_binance_1h(), "1h", "5m"),
-        "btc_15m_4h" => (load_binance_15m(), load_binance_4h(), "4h", "15m"),
-        _ => unreachable!(),
-    };
+    let source = "sol_15m_4h_champion";
+    let mut ltf_data = load_sol_15m();
+    let mut htf_data = load_sol_4h();
 
     if let Some(limit) = max_bars {
         if ltf_data.len() > limit {
@@ -97,9 +81,11 @@ fn main() {
 
     let mut config = FractalMTFConfig::default();
     config.rr_target = Decimal::from(rr_raw);
-    config.htf_name = htf_name;
-    config.ltf_name = ltf_name;
+    config.htf_name = "4h";
+    config.ltf_name = "15m";
     config.log_progress = true;
+    config.entry_variant = EntryVariant::ObMidpoint;
+    config.reversal_confirm_mode = ReversalConfirmMode::CisdOnly;
 
     let ltf_bars = ltf_data.len();
     let htf_bars = htf_data.len();

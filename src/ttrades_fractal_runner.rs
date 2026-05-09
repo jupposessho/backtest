@@ -7,7 +7,9 @@ use std::sync::Arc;
 use backtest::{
     candle_stick_loader::{CandleDataSource, CandleStickLoader},
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::ttrades_fractal::{FractalConfig, TTradesFractal},
 };
 
@@ -20,7 +22,8 @@ fn load_binance_15m() -> Vec<CandleStick> {
 }
 
 fn load_parquet(path: &str) -> Vec<CandleStick> {
-    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path)).expect("failed loading parquet")
+    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
+        .expect("failed loading parquet")
 }
 
 fn print_stats(name: &str, result: &BacktestResult) {
@@ -94,7 +97,10 @@ fn main() {
     config.rr_target = Decimal::from(rr_raw);
 
     let bars = data.len();
-    let model = TTradesFractal { data: Arc::new(data), config };
+    let model = TTradesFractal {
+        data: Arc::new(data),
+        config,
+    };
     let result = execute(model);
 
     println!("TTrades Fractal");

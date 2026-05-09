@@ -65,7 +65,11 @@ fn net_usd_1_micro(result: &BacktestResult, asset: &str) -> Decimal {
         return Decimal::ZERO;
     };
     let gross_points = result.trades.iter().map(|t| t.points().0).sum::<Decimal>();
-    let costs_points = result.trades.iter().map(|t| t.total_costs()).sum::<Decimal>();
+    let costs_points = result
+        .trades
+        .iter()
+        .map(|t| t.total_costs())
+        .sum::<Decimal>();
     ((gross_points - costs_points) * mult).round_dp(2)
 }
 
@@ -74,7 +78,8 @@ fn load_binance(json: &'static str) -> Vec<CandleStick> {
 }
 
 fn load_parquet(path: &str) -> Vec<CandleStick> {
-    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path)).expect("failed loading parquet")
+    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
+        .expect("failed loading parquet")
 }
 
 fn cap(mut data: Vec<CandleStick>, max_bars: usize) -> Vec<CandleStick> {
@@ -140,12 +145,21 @@ fn summarize(result: &BacktestResult) -> (Decimal, Decimal, Decimal, Decimal, De
     } else {
         Decimal::ZERO
     };
-    let net = ((capital - Decimal::from(1000)) / Decimal::from(1000) * Decimal::from(100)).round_dp(2);
-    let total_costs = result.trades.iter().map(|t| t.total_costs()).sum::<Decimal>().round_dp(2);
+    let net =
+        ((capital - Decimal::from(1000)) / Decimal::from(1000) * Decimal::from(100)).round_dp(2);
+    let total_costs = result
+        .trades
+        .iter()
+        .map(|t| t.total_costs())
+        .sum::<Decimal>()
+        .round_dp(2);
     (net, pf, win_rate, max_dd, total_costs, total)
 }
 
-fn split_train_test(data: &Arc<Vec<CandleStick>>, train_ratio: f64) -> (Arc<Vec<CandleStick>>, Arc<Vec<CandleStick>>) {
+fn split_train_test(
+    data: &Arc<Vec<CandleStick>>,
+    train_ratio: f64,
+) -> (Arc<Vec<CandleStick>>, Arc<Vec<CandleStick>>) {
     let n = data.len();
     let split = ((n as f64) * train_ratio).floor() as usize;
     let split = split.clamp(1, n.saturating_sub(1));
@@ -213,7 +227,11 @@ fn run_fractal_case(
         config: naive_cfg,
     });
     let naive = summarize(&naive_result);
-    let naive_net = if mkt == "futures" { net_usd_1_micro(&naive_result, asset) } else { naive.0 };
+    let naive_net = if mkt == "futures" {
+        net_usd_1_micro(&naive_result, asset)
+    } else {
+        naive.0
+    };
 
     let naive_bad = naive.0 <= Decimal::ZERO || naive.1 < Decimal::ONE;
     if naive_bad {
@@ -241,17 +259,25 @@ fn run_fractal_case(
         };
     }
 
-    let mut outcomes: Vec<(i32, (Decimal, Decimal, Decimal, Decimal, Decimal, usize), Decimal)> = Vec::new();
+    let mut outcomes: Vec<(
+        i32,
+        (Decimal, Decimal, Decimal, Decimal, Decimal, usize),
+        Decimal,
+    )> = Vec::new();
     for &ticks in slippage_levels {
         let mut cfg = FractalConfig::default();
         cfg.tick_size = tick_size;
         cfg.slippage_ticks_per_side = ticks;
         let result = execute(TTradesFractal {
-                data: Arc::clone(&data),
-                config: cfg,
-            });
+            data: Arc::clone(&data),
+            config: cfg,
+        });
         let s = summarize(&result);
-        let net_disp = if mkt == "futures" { net_usd_1_micro(&result, asset) } else { s.0 };
+        let net_disp = if mkt == "futures" {
+            net_usd_1_micro(&result, asset)
+        } else {
+            s.0
+        };
         outcomes.push((ticks, s, net_disp));
     }
 
@@ -265,13 +291,21 @@ fn run_fractal_case(
         config: wf_cfg.clone(),
     });
     let wf_train = summarize(&wf_train_result);
-    let wf_train_net = if mkt == "futures" { net_usd_1_micro(&wf_train_result, asset).to_string() } else { wf_train.0.to_string() };
+    let wf_train_net = if mkt == "futures" {
+        net_usd_1_micro(&wf_train_result, asset).to_string()
+    } else {
+        wf_train.0.to_string()
+    };
     let wf_test_result = execute(TTradesFractal {
         data: test_data,
         config: wf_cfg,
     });
     let wf_test = summarize(&wf_test_result);
-    let wf_test_net = if mkt == "futures" { net_usd_1_micro(&wf_test_result, asset).to_string() } else { wf_test.0.to_string() };
+    let wf_test_net = if mkt == "futures" {
+        net_usd_1_micro(&wf_test_result, asset).to_string()
+    } else {
+        wf_test.0.to_string()
+    };
 
     Row {
         strategy: "ttrades_fractal",
@@ -341,7 +375,11 @@ fn run_mtf_case(
         config: naive_cfg,
     });
     let naive = summarize(&naive_result);
-    let naive_net = if mkt == "futures" { net_usd_1_micro(&naive_result, asset) } else { naive.0 };
+    let naive_net = if mkt == "futures" {
+        net_usd_1_micro(&naive_result, asset)
+    } else {
+        naive.0
+    };
 
     let naive_bad = naive.0 <= Decimal::ZERO || naive.1 < Decimal::ONE;
     if naive_bad {
@@ -366,7 +404,11 @@ fn run_mtf_case(
         };
     }
 
-    let mut outcomes: Vec<(i32, (Decimal, Decimal, Decimal, Decimal, Decimal, usize), Decimal)> = Vec::new();
+    let mut outcomes: Vec<(
+        i32,
+        (Decimal, Decimal, Decimal, Decimal, Decimal, usize),
+        Decimal,
+    )> = Vec::new();
     for &ticks in slippage_levels {
         let mut cfg = FractalMTFConfig::default();
         cfg.tick_size = tick_size;
@@ -380,12 +422,16 @@ fn run_mtf_case(
         cfg.poi_padding_bps = poi_padding_bps;
         cfg.ob_sweep_tolerance_bps = ob_sweep_tolerance_bps;
         let result = execute(TTradesFractalMTF {
-                ltf_data: Arc::clone(&ltf_data),
-                htf_data: Arc::clone(&htf),
-                config: cfg,
-            });
+            ltf_data: Arc::clone(&ltf_data),
+            htf_data: Arc::clone(&htf),
+            config: cfg,
+        });
         let s = summarize(&result);
-        let net_disp = if mkt == "futures" { net_usd_1_micro(&result, asset) } else { s.0 };
+        let net_disp = if mkt == "futures" {
+            net_usd_1_micro(&result, asset)
+        } else {
+            s.0
+        };
         outcomes.push((ticks, s, net_disp));
     }
 
@@ -416,14 +462,22 @@ fn run_mtf_case(
         config: wf_cfg.clone(),
     });
     let wf_train = summarize(&wf_train_result);
-    let wf_train_net = if mkt == "futures" { net_usd_1_micro(&wf_train_result, asset).to_string() } else { wf_train.0.to_string() };
+    let wf_train_net = if mkt == "futures" {
+        net_usd_1_micro(&wf_train_result, asset).to_string()
+    } else {
+        wf_train.0.to_string()
+    };
     let wf_test_result = execute(TTradesFractalMTF {
         ltf_data: ltf_test,
         htf_data: Arc::new(htf_test),
         config: wf_cfg,
     });
     let wf_test = summarize(&wf_test_result);
-    let wf_test_net = if mkt == "futures" { net_usd_1_micro(&wf_test_result, asset).to_string() } else { wf_test.0.to_string() };
+    let wf_test_net = if mkt == "futures" {
+        net_usd_1_micro(&wf_test_result, asset).to_string()
+    } else {
+        wf_test.0.to_string()
+    };
 
     Row {
         strategy: "ttrades_fractal_mtf",
@@ -450,12 +504,19 @@ fn md(rows: &[Row], capped_bars: usize, fast: bool) -> String {
     let mut out = String::new();
     out.push_str("# Strategy Validation Matrix\n\n");
     out.push_str("Scope: all implemented TTrades strategies, all available assets and reasonable timeframes.\n\n");
-    out.push_str(&format!("Data cap per dataset for this pass: {} bars.\n\n", capped_bars));
+    out.push_str(&format!(
+        "Data cap per dataset for this pass: {} bars.\n\n",
+        capped_bars
+    ));
     out.push_str(&format!("Mode: {}\n\n", if fast { "FAST" } else { "FULL" }));
-    out.push_str("Optimization: if naive (no fee/slippage) is not tradable, realism sweeps are skipped.\n\n");
+    out.push_str(
+        "Optimization: if naive (no fee/slippage) is not tradable, realism sweeps are skipped.\n\n",
+    );
     out.push_str("Units: crypto net is `%`; futures net is `$` per 1 micro contract (MNQ=$2/pt, MES=$5/pt, GOLD=$10/pt).\n\n");
     out.push_str("| strategy | market | asset | timeframe | net_result | net_unit | profit_factor | win_rate_% | trades | max_dd_% | total_costs | wf_train_net | wf_test_net | wf_test_pf | validated_reality_check | setup_coverage | final_verdict |\n");
-    out.push_str("|---|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|\n");
+    out.push_str(
+        "|---|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|\n",
+    );
     for r in rows {
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
@@ -498,22 +559,61 @@ fn main() {
     let capped = if fast { 20_000usize } else { 40_000usize };
     let slippage_levels: Vec<i32> = if fast { vec![0, 1] } else { vec![0, 1, 2] };
 
-    let btc_5m = Arc::new(cap(load_binance(include_str!("../assets/binance_BTCUSDT_5m.json")), capped));
-    let btc_15m = Arc::new(cap(load_binance(include_str!("../assets/binance_BTCUSDT_15m.json")), capped));
-    let btc_1h = Arc::new(cap(load_binance(include_str!("../assets/binance_BTCUSDT_1h.json")), capped));
-    let btc_4h = Arc::new(cap(load_binance(include_str!("../assets/binance_BTCUSDT_4h.json")), capped));
+    let btc_5m = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_BTCUSDT_5m.json")),
+        capped,
+    ));
+    let btc_15m = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_BTCUSDT_15m.json")),
+        capped,
+    ));
+    let btc_1h = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_BTCUSDT_1h.json")),
+        capped,
+    ));
+    let btc_4h = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_BTCUSDT_4h.json")),
+        capped,
+    ));
 
-    let eth_5m = Arc::new(cap(load_binance(include_str!("../assets/binance_ETHUSDT_5m.json")), capped));
-    let eth_15m = Arc::new(cap(load_binance(include_str!("../assets/binance_ETHUSDT_15m.json")), capped));
-    let eth_1h = Arc::new(cap(load_binance(include_str!("../assets/binance_ETHUSDT_1h.json")), capped));
-    let eth_4h = Arc::new(cap(load_binance(include_str!("../assets/binance_ETHUSDT_4h.json")), capped));
+    let eth_5m = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_ETHUSDT_5m.json")),
+        capped,
+    ));
+    let eth_15m = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_ETHUSDT_15m.json")),
+        capped,
+    ));
+    let eth_1h = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_ETHUSDT_1h.json")),
+        capped,
+    ));
+    let eth_4h = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_ETHUSDT_4h.json")),
+        capped,
+    ));
 
-    let sol_5m = Arc::new(cap(load_binance(include_str!("../assets/binance_SOLUSDT_5m.json")), capped));
-    let sol_15m = Arc::new(cap(load_binance(include_str!("../assets/binance_SOLUSDT_15m.json")), capped));
-    let sol_1h = Arc::new(cap(load_binance(include_str!("../assets/binance_SOLUSDT_1h.json")), capped));
-    let sol_4h = Arc::new(cap(load_binance(include_str!("../assets/binance_SOLUSDT_4h.json")), capped));
+    let sol_5m = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_SOLUSDT_5m.json")),
+        capped,
+    ));
+    let sol_15m = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_SOLUSDT_15m.json")),
+        capped,
+    ));
+    let sol_1h = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_SOLUSDT_1h.json")),
+        capped,
+    ));
+    let sol_4h = Arc::new(cap(
+        load_binance(include_str!("../assets/binance_SOLUSDT_4h.json")),
+        capped,
+    ));
 
-    let gold_1m = Arc::new(cap(load_parquet("/Users/waff/develop/play/nq/gold_1m_cont_clean.parquet"), capped));
+    let gold_1m = Arc::new(cap(
+        load_parquet("/Users/waff/develop/play/nq/gold_1m_cont_clean.parquet"),
+        capped,
+    ));
     let mnq_1m = Arc::new(cap(load_parquet("assets/mnq_1m_cont.parquet"), capped));
     let mes_1m = Arc::new(cap(load_parquet("assets/mes_1m_cont.parquet"), capped));
 
@@ -531,39 +631,210 @@ fn main() {
     let mes_4h = Arc::new(resample_from_1m(&mes_1m, 240));
 
     let fractal_jobs: Vec<(&'static str, &'static str, Arc<Vec<CandleStick>>, Decimal)> = vec![
-        ("BTC", "5m", Arc::clone(&btc_5m), Decimal::from_f32(0.01).unwrap()),
-        ("BTC", "15m", Arc::clone(&btc_15m), Decimal::from_f32(0.01).unwrap()),
-        ("BTC", "1h", Arc::clone(&btc_1h), Decimal::from_f32(0.01).unwrap()),
-        ("BTC", "4h", Arc::clone(&btc_4h), Decimal::from_f32(0.01).unwrap()),
-        ("ETH", "5m", Arc::clone(&eth_5m), Decimal::from_f32(0.01).unwrap()),
-        ("ETH", "15m", Arc::clone(&eth_15m), Decimal::from_f32(0.01).unwrap()),
-        ("ETH", "1h", Arc::clone(&eth_1h), Decimal::from_f32(0.01).unwrap()),
-        ("ETH", "4h", Arc::clone(&eth_4h), Decimal::from_f32(0.01).unwrap()),
-        ("SOL", "5m", Arc::clone(&sol_5m), Decimal::from_f32(0.001).unwrap()),
-        ("SOL", "15m", Arc::clone(&sol_15m), Decimal::from_f32(0.001).unwrap()),
-        ("SOL", "1h", Arc::clone(&sol_1h), Decimal::from_f32(0.001).unwrap()),
-        ("SOL", "4h", Arc::clone(&sol_4h), Decimal::from_f32(0.001).unwrap()),
-        ("GOLD", "1m", Arc::clone(&gold_1m), Decimal::from_f32(0.1).unwrap()),
-        ("MNQ", "1m", Arc::clone(&mnq_1m), Decimal::from_f32(0.25).unwrap()),
-        ("MES", "1m", Arc::clone(&mes_1m), Decimal::from_f32(0.25).unwrap()),
+        (
+            "BTC",
+            "5m",
+            Arc::clone(&btc_5m),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "BTC",
+            "15m",
+            Arc::clone(&btc_15m),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "BTC",
+            "1h",
+            Arc::clone(&btc_1h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "BTC",
+            "4h",
+            Arc::clone(&btc_4h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "ETH",
+            "5m",
+            Arc::clone(&eth_5m),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "ETH",
+            "15m",
+            Arc::clone(&eth_15m),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "ETH",
+            "1h",
+            Arc::clone(&eth_1h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "ETH",
+            "4h",
+            Arc::clone(&eth_4h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "SOL",
+            "5m",
+            Arc::clone(&sol_5m),
+            Decimal::from_f32(0.001).unwrap(),
+        ),
+        (
+            "SOL",
+            "15m",
+            Arc::clone(&sol_15m),
+            Decimal::from_f32(0.001).unwrap(),
+        ),
+        (
+            "SOL",
+            "1h",
+            Arc::clone(&sol_1h),
+            Decimal::from_f32(0.001).unwrap(),
+        ),
+        (
+            "SOL",
+            "4h",
+            Arc::clone(&sol_4h),
+            Decimal::from_f32(0.001).unwrap(),
+        ),
+        (
+            "GOLD",
+            "1m",
+            Arc::clone(&gold_1m),
+            Decimal::from_f32(0.1).unwrap(),
+        ),
+        (
+            "MNQ",
+            "1m",
+            Arc::clone(&mnq_1m),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
+        (
+            "MES",
+            "1m",
+            Arc::clone(&mes_1m),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
     ];
 
-    let base_mtf_jobs: Vec<(&'static str, &'static str, Arc<Vec<CandleStick>>, Arc<Vec<CandleStick>>, Decimal)> = vec![
-        ("BTC", "5m/1h", Arc::clone(&btc_5m), Arc::clone(&btc_1h), Decimal::from_f32(0.01).unwrap()),
-        ("BTC", "15m/4h", Arc::clone(&btc_15m), Arc::clone(&btc_4h), Decimal::from_f32(0.01).unwrap()),
-        ("ETH", "5m/1h", Arc::clone(&eth_5m), Arc::clone(&eth_1h), Decimal::from_f32(0.01).unwrap()),
-        ("ETH", "15m/4h", Arc::clone(&eth_15m), Arc::clone(&eth_4h), Decimal::from_f32(0.01).unwrap()),
-        ("SOL", "5m/1h", Arc::clone(&sol_5m), Arc::clone(&sol_1h), Decimal::from_f32(0.001).unwrap()),
-        ("SOL", "15m/4h", Arc::clone(&sol_15m), Arc::clone(&sol_4h), Decimal::from_f32(0.001).unwrap()),
-        ("GOLD", "5m/1h", Arc::clone(&gold_5m), Arc::clone(&gold_1h), Decimal::from_f32(0.1).unwrap()),
-        ("MNQ", "5m/1h", Arc::clone(&mnq_5m), Arc::clone(&mnq_1h), Decimal::from_f32(0.25).unwrap()),
-        ("MES", "5m/1h", Arc::clone(&mes_5m), Arc::clone(&mes_1h), Decimal::from_f32(0.25).unwrap()),
-        ("GOLD", "15m/4h", Arc::clone(&gold_15m), Arc::clone(&gold_4h), Decimal::from_f32(0.1).unwrap()),
-        ("MNQ", "15m/4h", Arc::clone(&mnq_15m), Arc::clone(&mnq_4h), Decimal::from_f32(0.25).unwrap()),
-        ("MES", "15m/4h", Arc::clone(&mes_15m), Arc::clone(&mes_4h), Decimal::from_f32(0.25).unwrap()),
-        ("GOLD", "1m/15m", Arc::clone(&gold_1m), Arc::clone(&gold_15m), Decimal::from_f32(0.1).unwrap()),
-        ("MNQ", "1m/15m", Arc::clone(&mnq_1m), Arc::clone(&mnq_15m), Decimal::from_f32(0.25).unwrap()),
-        ("MES", "1m/15m", Arc::clone(&mes_1m), Arc::clone(&mes_15m), Decimal::from_f32(0.25).unwrap()),
+    let base_mtf_jobs: Vec<(
+        &'static str,
+        &'static str,
+        Arc<Vec<CandleStick>>,
+        Arc<Vec<CandleStick>>,
+        Decimal,
+    )> = vec![
+        (
+            "BTC",
+            "5m/1h",
+            Arc::clone(&btc_5m),
+            Arc::clone(&btc_1h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "BTC",
+            "15m/4h",
+            Arc::clone(&btc_15m),
+            Arc::clone(&btc_4h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "ETH",
+            "5m/1h",
+            Arc::clone(&eth_5m),
+            Arc::clone(&eth_1h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "ETH",
+            "15m/4h",
+            Arc::clone(&eth_15m),
+            Arc::clone(&eth_4h),
+            Decimal::from_f32(0.01).unwrap(),
+        ),
+        (
+            "SOL",
+            "5m/1h",
+            Arc::clone(&sol_5m),
+            Arc::clone(&sol_1h),
+            Decimal::from_f32(0.001).unwrap(),
+        ),
+        (
+            "SOL",
+            "15m/4h",
+            Arc::clone(&sol_15m),
+            Arc::clone(&sol_4h),
+            Decimal::from_f32(0.001).unwrap(),
+        ),
+        (
+            "GOLD",
+            "5m/1h",
+            Arc::clone(&gold_5m),
+            Arc::clone(&gold_1h),
+            Decimal::from_f32(0.1).unwrap(),
+        ),
+        (
+            "MNQ",
+            "5m/1h",
+            Arc::clone(&mnq_5m),
+            Arc::clone(&mnq_1h),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
+        (
+            "MES",
+            "5m/1h",
+            Arc::clone(&mes_5m),
+            Arc::clone(&mes_1h),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
+        (
+            "GOLD",
+            "15m/4h",
+            Arc::clone(&gold_15m),
+            Arc::clone(&gold_4h),
+            Decimal::from_f32(0.1).unwrap(),
+        ),
+        (
+            "MNQ",
+            "15m/4h",
+            Arc::clone(&mnq_15m),
+            Arc::clone(&mnq_4h),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
+        (
+            "MES",
+            "15m/4h",
+            Arc::clone(&mes_15m),
+            Arc::clone(&mes_4h),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
+        (
+            "GOLD",
+            "1m/15m",
+            Arc::clone(&gold_1m),
+            Arc::clone(&gold_15m),
+            Decimal::from_f32(0.1).unwrap(),
+        ),
+        (
+            "MNQ",
+            "1m/15m",
+            Arc::clone(&mnq_1m),
+            Arc::clone(&mnq_15m),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
+        (
+            "MES",
+            "1m/15m",
+            Arc::clone(&mes_1m),
+            Arc::clone(&mes_15m),
+            Decimal::from_f32(0.25).unwrap(),
+        ),
     ];
 
     let reversal_modes: Vec<(&'static str, ReversalConfirmMode)> = vec![
@@ -579,15 +850,61 @@ fn main() {
         ("london_ny_weekdays", 0b0001_1111, KillzoneMode::LondonNy),
     ];
 
-    let baseline_opportunity = ("baseline", Decimal::from(2), EntryVariant::ObMidpoint, 0i32, 0i32);
+    let baseline_opportunity = (
+        "baseline",
+        Decimal::from(2),
+        EntryVariant::ObMidpoint,
+        0i32,
+        0i32,
+    );
     let selective_opportunities: Vec<(&'static str, Decimal, EntryVariant, i32, i32)> = vec![
-        ("more_hits_close_rr15", Decimal::new(15, 1), EntryVariant::Close, 5, 5),
-        ("more_hits_ob_level_rr15", Decimal::new(15, 1), EntryVariant::ObLevel, 10, 8),
-        ("more_hits_close_rr12", Decimal::new(12, 1), EntryVariant::Close, 10, 10),
-        ("more_hits_ob_mid_rr15", Decimal::new(15, 1), EntryVariant::ObMidpoint, 10, 8),
+        (
+            "more_hits_close_rr15",
+            Decimal::new(15, 1),
+            EntryVariant::Close,
+            5,
+            5,
+        ),
+        (
+            "more_hits_ob_level_rr15",
+            Decimal::new(15, 1),
+            EntryVariant::ObLevel,
+            10,
+            8,
+        ),
+        (
+            "more_hits_close_rr12",
+            Decimal::new(12, 1),
+            EntryVariant::Close,
+            10,
+            10,
+        ),
+        (
+            "more_hits_ob_mid_rr15",
+            Decimal::new(15, 1),
+            EntryVariant::ObMidpoint,
+            10,
+            8,
+        ),
     ];
 
-    let mut mtf_jobs: Vec<(&'static str, &'static str, &'static str, &'static str, &'static str, Arc<Vec<CandleStick>>, Arc<Vec<CandleStick>>, Decimal, ReversalConfirmMode, u8, KillzoneMode, Decimal, EntryVariant, i32, i32)> = vec![];
+    let mut mtf_jobs: Vec<(
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+        Arc<Vec<CandleStick>>,
+        Arc<Vec<CandleStick>>,
+        Decimal,
+        ReversalConfirmMode,
+        u8,
+        KillzoneMode,
+        Decimal,
+        EntryVariant,
+        i32,
+        i32,
+    )> = vec![];
     for (asset, tf, ltf, htf, tick) in base_mtf_jobs {
         for (mode_name, mode) in &reversal_modes {
             for (time_profile_name, weekday_mask, killzone_mode) in &time_profiles {
@@ -609,12 +926,25 @@ fn main() {
                     baseline_opportunity.4,
                 ));
 
-                let selective_target = matches!((asset, tf), ("ETH", "5m/1h") | ("MES", "1m/15m") | ("GOLD", "1m/15m"));
+                let selective_target = matches!(
+                    (asset, tf),
+                    ("ETH", "5m/1h") | ("MES", "1m/15m") | ("GOLD", "1m/15m")
+                );
                 let selective_mode = matches!(*mode_name, "ifvg_only" | "cisd_and_ifvg");
-                let selective_time = matches!(*time_profile_name, "all_day_all_week" | "london_ny_weekdays");
+                let selective_time = matches!(
+                    *time_profile_name,
+                    "all_day_all_week" | "london_ny_weekdays"
+                );
 
                 if selective_target && selective_mode && selective_time {
-                    for (opportunity_name, rr_target, entry_variant, poi_padding_bps, ob_sweep_tolerance_bps) in &selective_opportunities {
+                    for (
+                        opportunity_name,
+                        rr_target,
+                        entry_variant,
+                        poi_padding_bps,
+                        ob_sweep_tolerance_bps,
+                    ) in &selective_opportunities
+                    {
                         mtf_jobs.push((
                             asset,
                             tf,
@@ -647,26 +977,44 @@ fn main() {
 
     let mtf_rows: Vec<Row> = mtf_jobs
         .par_iter()
-        .map(|(asset, tf, mode_name, time_profile_name, opportunity_name, ltf, htf, tick, mode, weekday_mask, killzone_mode, rr_target, entry_variant, poi_padding_bps, ob_sweep_tolerance_bps)| {
-            run_mtf_case(
+        .map(
+            |(
                 asset,
                 tf,
                 mode_name,
                 time_profile_name,
                 opportunity_name,
-                Arc::clone(ltf),
-                Arc::clone(htf),
-                *tick,
-                &slippage_levels,
-                *mode,
-                *weekday_mask,
-                *killzone_mode,
-                *rr_target,
-                *entry_variant,
-                *poi_padding_bps,
-                *ob_sweep_tolerance_bps,
-            )
-        })
+                ltf,
+                htf,
+                tick,
+                mode,
+                weekday_mask,
+                killzone_mode,
+                rr_target,
+                entry_variant,
+                poi_padding_bps,
+                ob_sweep_tolerance_bps,
+            )| {
+                run_mtf_case(
+                    asset,
+                    tf,
+                    mode_name,
+                    time_profile_name,
+                    opportunity_name,
+                    Arc::clone(ltf),
+                    Arc::clone(htf),
+                    *tick,
+                    &slippage_levels,
+                    *mode,
+                    *weekday_mask,
+                    *killzone_mode,
+                    *rr_target,
+                    *entry_variant,
+                    *poi_padding_bps,
+                    *ob_sweep_tolerance_bps,
+                )
+            },
+        )
         .collect();
     rows.extend(mtf_rows);
 
