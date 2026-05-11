@@ -178,6 +178,10 @@ path = "src/ema_wick_reclaim.rs"
 name = "ema_wick_reclaim_mnq"
 path = "src/ema_wick_reclaim_mnq.rs"
 
+[[bin]]
+name = "killzone_rejection_mnq"
+path = "src/killzone_rejection_mnq.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"
