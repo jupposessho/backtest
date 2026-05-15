@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "backtest": {
+      "source": "marketcalls/vectorbt-backtesting-skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/backtest/SKILL.md",
+      "computedHash": "efbb03da2859ed41e44a3c8ae8ba5016ad3369741084e528d42e678ac382cb8c"
+    }
+  }
+}
