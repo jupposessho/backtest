@@ -81,7 +81,11 @@ fn main() {
     }
     let htf_data = Arc::new(htf_vec);
 
-    let entries = [EntryVariant::Close, EntryVariant::ObLevel, EntryVariant::ObMidpoint];
+    let entries = [
+        EntryVariant::Close,
+        EntryVariant::ObLevel,
+        EntryVariant::ObMidpoint,
+    ];
     let confirms = [
         ReversalConfirmMode::CisdOnly,
         ReversalConfirmMode::IfvgOnly,
@@ -173,12 +177,7 @@ fn main() {
     for r in rows.iter().take(12) {
         println!(
             "{},{:.2},{},{},{},{}",
-            r.name,
-            r.net_6m_usd,
-            r.positive_months,
-            r.trades,
-            r.wins,
-            r.losses
+            r.name, r.net_6m_usd, r.positive_months, r.trades, r.wins, r.losses
         );
     }
 }

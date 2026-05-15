@@ -48,14 +48,8 @@ pub enum TargetModel {
 pub enum TrailingModel {
     None,
     BreakEvenAtR(Decimal),
-    StepAtR {
-        trigger_r: Decimal,
-        lock_r: Decimal,
-    },
-    ProgressiveHalfR {
-        start_r: Decimal,
-        step_r: Decimal,
-    },
+    StepAtR { trigger_r: Decimal, lock_r: Decimal },
+    ProgressiveHalfR { start_r: Decimal, step_r: Decimal },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -85,11 +79,13 @@ pub struct SetupCandidate {
     pub stop: StopModel,
     pub target: TargetModel,
     pub trailing: TrailingModel,
+    pub max_hold_bars: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
 pub struct OpenPosition {
     pub direction: PositionDirection,
+    pub entry_index: usize,
     pub open_time: i64,
     pub entry: DecimalVec,
     pub stop: DecimalVec,
@@ -97,6 +93,7 @@ pub struct OpenPosition {
     pub target: DecimalVec,
     pub initial_risk: Decimal,
     pub trailing: TrailingModel,
+    pub max_hold_bars: Option<usize>,
 }
 
 pub fn risk_amount(direction: PositionDirection, entry: DecimalVec, stop: DecimalVec) -> Decimal {

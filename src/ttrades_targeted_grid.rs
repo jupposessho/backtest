@@ -119,7 +119,12 @@ fn main() {
     ];
 
     let entry_variants = [("ob_midpoint", EntryVariant::ObMidpoint)];
-    let cisd_variants = [("body_flip", CisdVariant::BodyFlip)];
+    let cisd_variants = [
+        ("body_flip", CisdVariant::BodyFlip),
+        ("strict_wick_break", CisdVariant::StrictWickBreak),
+        ("last_series_close_break", CisdVariant::LastSeriesCloseBreak),
+        ("failure_swing", CisdVariant::FailureSwing),
+    ];
     let reversal_modes = [("cisd_only", ReversalConfirmMode::CisdOnly)];
 
     for (cisd_name, cisd_variant) in cisd_variants {

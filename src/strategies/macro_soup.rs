@@ -168,11 +168,8 @@ impl MacroSoup {
             match p.direction {
                 PositionDirection::Short => {
                     if p.sl < actual.high {
-                        let exit = crate::engine::types::apply_exit_slippage(
-                            p.direction,
-                            p.sl,
-                            execution,
-                        );
+                        let exit =
+                            crate::engine::types::apply_exit_slippage(p.direction, p.sl, execution);
                         return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
@@ -186,11 +183,8 @@ impl MacroSoup {
                         ));
                     }
                     if p.tp > actual.low {
-                        let exit = crate::engine::types::apply_exit_slippage(
-                            p.direction,
-                            p.tp,
-                            execution,
-                        );
+                        let exit =
+                            crate::engine::types::apply_exit_slippage(p.direction, p.tp, execution);
                         return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
@@ -207,11 +201,8 @@ impl MacroSoup {
                 }
                 PositionDirection::Long => {
                     if p.sl > actual.low {
-                        let exit = crate::engine::types::apply_exit_slippage(
-                            p.direction,
-                            p.sl,
-                            execution,
-                        );
+                        let exit =
+                            crate::engine::types::apply_exit_slippage(p.direction, p.sl, execution);
                         return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
@@ -225,11 +216,8 @@ impl MacroSoup {
                         ));
                     }
                     if p.tp < actual.high {
-                        let exit = crate::engine::types::apply_exit_slippage(
-                            p.direction,
-                            p.tp,
-                            execution,
-                        );
+                        let exit =
+                            crate::engine::types::apply_exit_slippage(p.direction, p.tp, execution);
                         return Some(Trade::from_position_with_exit(
                             p,
                             actual.open_time,
@@ -298,8 +286,12 @@ impl TradingModel for MacroSoup {
                             .iter()
                             .skip_while(|x| x.open_time <= position.open_time)
                             .collect_vec();
-                        let trade =
-                            Self::run_trade(position, candles_after_entry, self.be_threshold, &self.execution);
+                        let trade = Self::run_trade(
+                            position,
+                            candles_after_entry,
+                            self.be_threshold,
+                            &self.execution,
+                        );
                         if let Some(t) = trade {
                             trades.push(t)
                         }

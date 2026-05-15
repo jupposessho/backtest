@@ -2,8 +2,8 @@ use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 
-use crate::engine::execution::run_setups;
 use crate::engine::entry_policies::resolve_entry_policy;
+use crate::engine::execution::run_setups;
 use crate::engine::types::{
     EntryModel, EntryPolicy, ExecutionConfig as EngineExecutionConfig, SetupCandidate, StopModel,
     TargetModel, TrailingModel,
@@ -29,6 +29,7 @@ pub struct McConfig {
     pub pattern: SignalPattern,
     pub entry_mode: EntryMode,
     pub rr_target: Decimal,
+    pub take_profit_mode: TakeProfitMode,
     pub trade_window: Option<TimeWindow>,
     pub prev_open_fill_window_candles: usize,
     pub trailing_stop: TrailingStopConfig,
@@ -49,6 +50,7 @@ impl Default for McConfig {
             pattern: SignalPattern::Mc,
             entry_mode: EntryMode::Close,
             rr_target: Decimal::from_f32(1.5).unwrap(),
+            take_profit_mode: TakeProfitMode::RMultiple,
             trade_window: Some(TimeWindow::default()),
             prev_open_fill_window_candles: 3,
             trailing_stop: TrailingStopConfig::default(),
@@ -136,6 +138,12 @@ pub enum EntryMode {
     PrevOpen,
     PairMidpoint,
     PairExtreme,
+}
+
+#[derive(Clone)]
+pub enum TakeProfitMode {
+    RMultiple,
+    FixedPoints(Decimal),
 }
 
 #[derive(Clone)]
@@ -830,7 +838,10 @@ impl Mc {
         }
     }
 
-    fn trend_from_swings(swing_lows: &Vec<CandleStick>, swing_highs: &Vec<CandleStick>) -> TrendState {
+    fn trend_from_swings(
+        swing_lows: &Vec<CandleStick>,
+        swing_highs: &Vec<CandleStick>,
+    ) -> TrendState {
         if swing_lows.len() < 2 || swing_highs.len() < 2 {
             return TrendState::Neutral;
         }
@@ -848,11 +859,17 @@ impl Mc {
         }
     }
 
-    fn entry_price(entry_mode: &EntryMode, actual: CandleStick, previous: CandleStick) -> DecimalVec {
+    fn entry_price(
+        entry_mode: &EntryMode,
+        actual: CandleStick,
+        previous: CandleStick,
+    ) -> DecimalVec {
         match entry_mode {
             EntryMode::Close => actual.close,
             EntryMode::PrevOpen => previous.open,
-            EntryMode::PairMidpoint => DecimalVec((actual.high.0 + actual.low.0) / Decimal::from(2)),
+            EntryMode::PairMidpoint => {
+                DecimalVec((actual.high.0 + actual.low.0) / Decimal::from(2))
+            }
             EntryMode::PairExtreme => match actual.close > previous.close {
                 true => actual.low,
                 false => actual.high,
@@ -900,7 +917,11 @@ impl Mc {
         }
     }
 
-    fn trade_costs(entry: DecimalVec, exit: DecimalVec, execution: &ExecutionConfig) -> (Decimal, Decimal, Decimal) {
+    fn trade_costs(
+        entry: DecimalVec,
+        exit: DecimalVec,
+        execution: &ExecutionConfig,
+    ) -> (Decimal, Decimal, Decimal) {
         let notional = (entry.0 + exit.0) / Decimal::from(2);
         let commission = notional * execution.commission_rate_per_side * Decimal::from(2);
         let fees = notional * execution.fee_rate_per_side * Decimal::from(2);
@@ -1069,14 +1090,16 @@ impl Mc {
                             fvg_ok = last_fvg_touch_long
                                 .map(|i_touch| {
                                     ind >= i_touch
-                                        && (ind - i_touch) <= self.config.fvg_filter.touch_window_candles
+                                        && (ind - i_touch)
+                                            <= self.config.fvg_filter.touch_window_candles
                                 })
                                 .unwrap_or(false);
                         } else if bearish_signal {
                             fvg_ok = last_fvg_touch_short
                                 .map(|i_touch| {
                                     ind >= i_touch
-                                        && (ind - i_touch) <= self.config.fvg_filter.touch_window_candles
+                                        && (ind - i_touch)
+                                            <= self.config.fvg_filter.touch_window_candles
                                 })
                                 .unwrap_or(false);
                         }
@@ -1086,11 +1109,13 @@ impl Mc {
                         McMode::ReversalDaily => {
                             if bullish_signal {
                                 sweep_events.iter().any(|e| {
-                                    e.direction == PositionDirection::Long && e.range.contains(actual.close)
+                                    e.direction == PositionDirection::Long
+                                        && e.range.contains(actual.close)
                                 })
                             } else if bearish_signal {
                                 sweep_events.iter().any(|e| {
-                                    e.direction == PositionDirection::Short && e.range.contains(actual.close)
+                                    e.direction == PositionDirection::Short
+                                        && e.range.contains(actual.close)
                                 })
                             } else {
                                 false
@@ -1188,7 +1213,9 @@ impl Mc {
             EntryModel::SignalClose | EntryModel::MarketClose => actual.close,
             EntryModel::NextBarOpen => actual.close,
             EntryModel::LimitTouch { price, .. } => price,
-            EntryModel::LimitByPolicy { policy, .. } => resolve_entry_policy(policy, direction, actual, previous),
+            EntryModel::LimitByPolicy { policy, .. } => {
+                resolve_entry_policy(policy, direction, actual, previous)
+            }
         };
 
         let mut risk = match direction {
@@ -1212,10 +1239,12 @@ impl Mc {
                         };
                         probe_entry = repriced;
                         entry_model = match entry_model {
-                            EntryModel::LimitByPolicy { expiry_bars, .. } => EntryModel::LimitTouch {
-                                price: repriced,
-                                expiry_bars,
-                            },
+                            EntryModel::LimitByPolicy { expiry_bars, .. } => {
+                                EntryModel::LimitTouch {
+                                    price: repriced,
+                                    expiry_bars,
+                                }
+                            }
                             EntryModel::LimitTouch { expiry_bars, .. } => EntryModel::LimitTouch {
                                 price: repriced,
                                 expiry_bars,
@@ -1241,8 +1270,12 @@ impl Mc {
             signal_index: ind,
             entry: entry_model,
             stop: StopModel::FixedPrice(sl),
-            target: TargetModel::FixedR(rr_target),
+            target: match &self.config.take_profit_mode {
+                TakeProfitMode::RMultiple => TargetModel::FixedR(rr_target),
+                TakeProfitMode::FixedPoints(points) => TargetModel::FixedPoints(*points),
+            },
             trailing: self.trailing_model(),
+            max_hold_bars: None,
         })
     }
 }

@@ -3,14 +3,15 @@ use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 
 use crate::engine::types::ExecutionConfig;
+use crate::engine::{
+    execution::run_setups_with_metrics,
+    types::{EntryModel, SetupCandidate, StopModel, TargetModel, TrailingModel},
+};
 use crate::model::backtest_result::BacktestResult;
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
 use crate::model::fee_config::FeeConfig;
-use crate::model::position::Position;
 use crate::model::position_direction::PositionDirection;
-use crate::model::trade::Trade;
-use crate::model::trade_result::TradeResult;
 use crate::model::trading_model::TradingModel;
 use crate::to_new_york_time;
 use std::sync::Arc;
@@ -41,6 +42,16 @@ pub struct FractalMTFConfig {
     pub killzone_mode: KillzoneMode,
     pub poi_padding_bps: i32,
     pub ob_sweep_tolerance_bps: i32,
+    pub failure_swing_lookback_bars: usize,
+    pub failure_swing_breakout_close_only: bool,
+    pub failure_swing_retest_tolerance_bps: i32,
+    pub failure_swing_min_reclaim_ratio_bps: i32,
+    pub stop_buffer_bps: i32,
+    pub htf_bias_strict: bool,
+    pub require_htf_fvg: bool,
+    pub require_killzone_level_hit: bool,
+    pub killzone_level_hit_lookback_bars: usize,
+    pub killzone_reclaim_min_sweep_ticks: i32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -50,11 +61,14 @@ pub enum EntryVariant {
     ObMidpoint,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum CisdVariant {
     BodyFlip,
     StrictWickBreak,
     LastSeriesCloseBreak,
+    FailureSwing,
+    KillzoneReclaim,
+    ContinuationBreak,
 }
 
 #[derive(Clone, Copy)]
@@ -70,6 +84,7 @@ pub enum KillzoneMode {
     Off,
     NyOnly,
     LondonNy,
+    NamedSessions,
 }
 
 impl Default for FractalMTFConfig {
@@ -91,8 +106,35 @@ impl Default for FractalMTFConfig {
             killzone_mode: KillzoneMode::Off,
             poi_padding_bps: 0,
             ob_sweep_tolerance_bps: 0,
+            failure_swing_lookback_bars: 24,
+            failure_swing_breakout_close_only: false,
+            failure_swing_retest_tolerance_bps: 25,
+            failure_swing_min_reclaim_ratio_bps: 5000,
+            stop_buffer_bps: 5,
+            htf_bias_strict: false,
+            require_htf_fvg: false,
+            require_killzone_level_hit: false,
+            killzone_level_hit_lookback_bars: 12,
+            killzone_reclaim_min_sweep_ticks: 1,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KzSession {
+    Asia,
+    London,
+    NyAm,
+    NyPm,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SessionLevel {
+    session: KzSession,
+    start_ts: i64,
+    end_ts: i64,
+    high: DecimalVec,
+    low: DecimalVec,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -120,17 +162,182 @@ struct FVG {
     direction: PositionDirection,
 }
 
-#[derive(Clone, Copy)]
-struct PendingLimitOrder {
-    direction: PositionDirection,
-    entry: DecimalVec,
-    sl: DecimalVec,
-    tp: DecimalVec,
-    placed_index: usize,
-    expiry_index: usize,
-}
-
 impl TTradesFractalMTF {
+    fn session_for_ts(&self, ts: i64) -> Option<KzSession> {
+        let ny = to_new_york_time(ts);
+        let hm = (ny.hour(), ny.minute());
+        if hm >= (20, 0) {
+            Some(KzSession::Asia)
+        } else if hm >= (2, 0) && hm < (5, 0) {
+            Some(KzSession::London)
+        } else if hm >= (9, 15) && hm < (12, 0) {
+            Some(KzSession::NyAm)
+        } else if hm >= (14, 0) && hm < (16, 30) {
+            Some(KzSession::NyPm)
+        } else {
+            None
+        }
+    }
+
+    fn session_level_allowed_for_entry(entry_session: KzSession, level_session: KzSession) -> bool {
+        match entry_session {
+            KzSession::Asia => matches!(level_session, KzSession::NyPm),
+            KzSession::London => matches!(level_session, KzSession::Asia),
+            KzSession::NyAm => matches!(level_session, KzSession::Asia | KzSession::London),
+            KzSession::NyPm => matches!(
+                level_session,
+                KzSession::Asia | KzSession::London | KzSession::NyAm
+            ),
+        }
+    }
+
+    fn build_session_levels(&self) -> Vec<SessionLevel> {
+        let mut out = Vec::new();
+        let mut active_session: Option<KzSession> = None;
+        let mut session_start_ts = 0i64;
+        let mut session_high = DecimalVec(Decimal::ZERO);
+        let mut session_low = DecimalVec(Decimal::ZERO);
+        let mut session_end_ts = 0i64;
+
+        for candle in self.ltf_data.iter().copied() {
+            let current_session = self.session_for_ts(candle.open_time);
+            match (active_session, current_session) {
+                (Some(active), Some(current)) if active == current => {
+                    if candle.high > session_high {
+                        session_high = candle.high;
+                    }
+                    if candle.low < session_low {
+                        session_low = candle.low;
+                    }
+                    session_end_ts = candle.close_time;
+                }
+                (Some(active), Some(current)) => {
+                    out.push(SessionLevel {
+                        session: active,
+                        start_ts: session_start_ts,
+                        end_ts: session_end_ts,
+                        high: session_high,
+                        low: session_low,
+                    });
+                    active_session = Some(current);
+                    session_start_ts = candle.open_time;
+                    session_end_ts = candle.close_time;
+                    session_high = candle.high;
+                    session_low = candle.low;
+                }
+                (Some(active), None) => {
+                    out.push(SessionLevel {
+                        session: active,
+                        start_ts: session_start_ts,
+                        end_ts: session_end_ts,
+                        high: session_high,
+                        low: session_low,
+                    });
+                    active_session = None;
+                }
+                (None, Some(current)) => {
+                    active_session = Some(current);
+                    session_start_ts = candle.open_time;
+                    session_end_ts = candle.close_time;
+                    session_high = candle.high;
+                    session_low = candle.low;
+                }
+                (None, None) => {}
+            }
+        }
+
+        if let Some(active) = active_session {
+            out.push(SessionLevel {
+                session: active,
+                start_ts: session_start_ts,
+                end_ts: session_end_ts,
+                high: session_high,
+                low: session_low,
+            });
+        }
+
+        out
+    }
+
+    fn has_recent_killzone_level_hit(
+        &self,
+        ltf_index: usize,
+        direction: PositionDirection,
+        levels: &[SessionLevel],
+    ) -> bool {
+        let ts = self.ltf_data[ltf_index].open_time;
+        let Some(entry_session) = self.session_for_ts(ts) else {
+            return false;
+        };
+        let start = ltf_index.saturating_sub(self.config.killzone_level_hit_lookback_bars);
+
+        for level in levels {
+            if level.end_ts >= ts {
+                continue;
+            }
+            if !Self::session_level_allowed_for_entry(entry_session, level.session) {
+                continue;
+            }
+            for i in start..=ltf_index {
+                let c = self.ltf_data[i];
+                match direction {
+                    PositionDirection::Long => {
+                        if c.low <= level.low {
+                            return true;
+                        }
+                    }
+                    PositionDirection::Short => {
+                        if c.high >= level.high {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn detect_killzone_reclaim(
+        &self,
+        ltf_index: usize,
+        direction: PositionDirection,
+        levels: &[SessionLevel],
+    ) -> bool {
+        let current = self.ltf_data[ltf_index];
+        let ts = current.open_time;
+        let Some(entry_session) = self.session_for_ts(ts) else {
+            return false;
+        };
+        let min_sweep = self.config.tick_size
+            * Decimal::from(self.config.killzone_reclaim_min_sweep_ticks.max(0));
+
+        for level in levels {
+            if level.end_ts >= ts {
+                continue;
+            }
+            if !Self::session_level_allowed_for_entry(entry_session, level.session) {
+                continue;
+            }
+            match direction {
+                PositionDirection::Long => {
+                    if current.low <= DecimalVec(level.low.0 - min_sweep) && current.close > level.low
+                    {
+                        return true;
+                    }
+                }
+                PositionDirection::Short => {
+                    if current.high >= DecimalVec(level.high.0 + min_sweep)
+                        && current.close < level.high
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
     fn in_killzone(&self, ts: i64) -> bool {
         let ny = to_new_york_time(ts);
         let h = ny.hour() as i32;
@@ -138,6 +345,7 @@ impl TTradesFractalMTF {
             KillzoneMode::Off => true,
             KillzoneMode::NyOnly => (8..=11).contains(&h),
             KillzoneMode::LondonNy => (2..=5).contains(&h) || (8..=11).contains(&h),
+            KillzoneMode::NamedSessions => self.session_for_ts(ts).is_some(),
         }
     }
 
@@ -220,6 +428,16 @@ impl TTradesFractalMTF {
         !matches!(self.config.entry_variant, EntryVariant::Close)
     }
 
+    fn entry_model(&self, entry: DecimalVec) -> EntryModel {
+        match self.config.entry_variant {
+            EntryVariant::Close => EntryModel::NextBarOpen,
+            EntryVariant::ObLevel | EntryVariant::ObMidpoint => EntryModel::LimitTouch {
+                price: entry,
+                expiry_bars: 24,
+            },
+        }
+    }
+
     fn execution_config(&self) -> ExecutionConfig {
         let hundred = Decimal::from(100);
         ExecutionConfig {
@@ -250,11 +468,12 @@ impl TTradesFractalMTF {
         let lh = current.high < prev1.high && prev1.high < prev2.high;
         let ll = current.low < prev1.low && prev1.low < prev2.low;
 
-        // Simple trend determination
         if hh && hl {
             HTFBias::Bullish
         } else if lh && ll {
             HTFBias::Bearish
+        } else if self.config.htf_bias_strict {
+            HTFBias::None
         } else {
             // Check close position relative to previous candles
             let bullish_closes = (current.close > current.open) as i32
@@ -369,6 +588,9 @@ impl TTradesFractalMTF {
         let (poi_high, poi_low) = if let Some(fvg) = fvg {
             (fvg.high, fvg.low)
         } else {
+            if self.config.require_htf_fvg {
+                return None;
+            }
             match bias {
                 HTFBias::Bullish => (
                     swing_low,
@@ -485,6 +707,173 @@ impl TTradesFractalMTF {
                     }
                 }
             },
+            CisdVariant::FailureSwing => {
+                let scan_start = ltf_index.saturating_sub(self.config.failure_swing_lookback_bars);
+                if ltf_index.saturating_sub(scan_start) < 7 {
+                    return false;
+                }
+
+                let retest_tol = Decimal::from(self.config.failure_swing_retest_tolerance_bps)
+                    / Decimal::from(10_000);
+                let min_reclaim_ratio =
+                    Decimal::from(self.config.failure_swing_min_reclaim_ratio_bps)
+                        / Decimal::from(10_000);
+
+                let mut swing_high_idx: Option<usize> = None;
+                let mut swing_low_idx: Option<usize> = None;
+                for i in ((scan_start + 1)..ltf_index.saturating_sub(1)).rev() {
+                    let prev = self.ltf_data[i - 1];
+                    let curr = self.ltf_data[i];
+                    let next = self.ltf_data[i + 1];
+                    if swing_high_idx.is_none() && curr.high > prev.high && curr.high > next.high {
+                        swing_high_idx = Some(i);
+                    }
+                    if swing_low_idx.is_none() && curr.low < prev.low && curr.low < next.low {
+                        swing_low_idx = Some(i);
+                    }
+                    if swing_high_idx.is_some() && swing_low_idx.is_some() {
+                        break;
+                    }
+                }
+
+                match expected_direction {
+                    PositionDirection::Short => {
+                        let Some(h1_idx) = swing_high_idx else {
+                            return false;
+                        };
+
+                        let mut l1_idx: Option<usize> = None;
+                        for i in (h1_idx + 1)..ltf_index.saturating_sub(1) {
+                            let prev = self.ltf_data[i - 1];
+                            let curr = self.ltf_data[i];
+                            let next = self.ltf_data[i + 1];
+                            if curr.low < prev.low && curr.low < next.low {
+                                l1_idx = Some(i);
+                                break;
+                            }
+                        }
+                        let Some(l1_idx) = l1_idx else {
+                            return false;
+                        };
+
+                        let h1 = self.ltf_data[h1_idx];
+                        let l1 = self.ltf_data[l1_idx];
+                        let swing_range = h1.high.0 - l1.low.0;
+                        if swing_range <= Decimal::ZERO {
+                            return false;
+                        }
+
+                        let mut h2_idx: Option<usize> = None;
+                        let retest_floor = h1.high.0 * (Decimal::ONE - retest_tol);
+                        for i in (l1_idx + 1)..ltf_index.saturating_sub(1) {
+                            let prev = self.ltf_data[i - 1];
+                            let curr = self.ltf_data[i];
+                            let next = self.ltf_data[i + 1];
+                            let reclaim = (curr.high.0 - l1.low.0) / swing_range;
+                            if curr.high > prev.high
+                                && curr.high > next.high
+                                && curr.high < h1.high
+                                && curr.high.0 >= retest_floor
+                                && reclaim >= min_reclaim_ratio
+                            {
+                                h2_idx = Some(i);
+                            }
+                        }
+                        let Some(h2_idx) = h2_idx else {
+                            return false;
+                        };
+
+                        let clean_break =
+                            ((h2_idx + 1)..ltf_index).all(|i| self.ltf_data[i].low >= l1.low);
+                        if !clean_break {
+                            return false;
+                        }
+
+                        let broke = if self.config.failure_swing_breakout_close_only {
+                            current.close < l1.low
+                        } else {
+                            current.low < l1.low || current.close < l1.low
+                        };
+
+                        broke
+                    }
+                    PositionDirection::Long => {
+                        let Some(l1_idx) = swing_low_idx else {
+                            return false;
+                        };
+
+                        let mut h1_idx: Option<usize> = None;
+                        for i in (l1_idx + 1)..ltf_index.saturating_sub(1) {
+                            let prev = self.ltf_data[i - 1];
+                            let curr = self.ltf_data[i];
+                            let next = self.ltf_data[i + 1];
+                            if curr.high > prev.high && curr.high > next.high {
+                                h1_idx = Some(i);
+                                break;
+                            }
+                        }
+                        let Some(h1_idx) = h1_idx else {
+                            return false;
+                        };
+
+                        let l1 = self.ltf_data[l1_idx];
+                        let h1 = self.ltf_data[h1_idx];
+                        let swing_range = h1.high.0 - l1.low.0;
+                        if swing_range <= Decimal::ZERO {
+                            return false;
+                        }
+
+                        let mut l2_idx: Option<usize> = None;
+                        let retest_ceiling = l1.low.0 * (Decimal::ONE + retest_tol);
+                        for i in (h1_idx + 1)..ltf_index.saturating_sub(1) {
+                            let prev = self.ltf_data[i - 1];
+                            let curr = self.ltf_data[i];
+                            let next = self.ltf_data[i + 1];
+                            let reclaim = (h1.high.0 - curr.low.0) / swing_range;
+                            if curr.low < prev.low
+                                && curr.low < next.low
+                                && curr.low > l1.low
+                                && curr.low.0 <= retest_ceiling
+                                && reclaim >= min_reclaim_ratio
+                            {
+                                l2_idx = Some(i);
+                            }
+                        }
+                        let Some(l2_idx) = l2_idx else {
+                            return false;
+                        };
+
+                        let clean_break =
+                            ((l2_idx + 1)..ltf_index).all(|i| self.ltf_data[i].high <= h1.high);
+                        if !clean_break {
+                            return false;
+                        }
+
+                        let broke = if self.config.failure_swing_breakout_close_only {
+                            current.close > h1.high
+                        } else {
+                            current.high > h1.high || current.close > h1.high
+                        };
+
+                        broke
+                    }
+                }
+            }
+            CisdVariant::KillzoneReclaim => false,
+            CisdVariant::ContinuationBreak => match expected_direction {
+                PositionDirection::Long => {
+                    prev2.close > prev2.open
+                        && prev1.close < prev1.open
+                        && current.close > current.open
+                        && current.close > prev1.high
+                }
+                PositionDirection::Short => {
+                    prev2.close < prev2.open
+                        && prev1.close > prev1.open
+                        && current.close < current.open
+                        && current.close < prev1.low
+                }
+            },
         }
     }
 
@@ -558,13 +947,14 @@ impl TTradesFractalMTF {
             i64::MAX
         }
     }
-}
 
-impl TradingModel for TTradesFractalMTF {
-    fn execute(&self) -> BacktestResult {
-        let mut trades = Vec::new();
-        let mut position: Option<Position> = None;
-        let mut pending: Option<PendingLimitOrder> = None;
+    pub fn detect_setups(&self) -> Vec<SetupCandidate> {
+        let mut setups = Vec::new();
+        let session_levels = if self.config.require_killzone_level_hit {
+            self.build_session_levels()
+        } else {
+            Vec::new()
+        };
         let mut current_setup: Option<HTFSetup> = None;
         let mut poi_hits = 0;
         let mut cisd_matches = 0;
@@ -572,10 +962,8 @@ impl TradingModel for TTradesFractalMTF {
 
         let mut htf_index = 0;
         let mut ltf_index = 0;
-        let execution = self.execution_config();
-
         if self.config.log_progress {
-            println!("Starting TTrades Fractal MTF backtest:");
+            println!("Starting TTrades Fractal MTF setup detection:");
             println!("  HTF: {} candles", self.htf_data.len());
             println!("  LTF: {} candles", self.ltf_data.len());
         }
@@ -591,226 +979,129 @@ impl TradingModel for TTradesFractalMTF {
             }
 
             // Find LTF candles within this HTF candle's time range
-            let ltf_start = ltf_index;
             while ltf_index < self.ltf_data.len()
                 && self.ltf_data[ltf_index].open_time < next_htf_time
             {
                 let ltf_candle = self.ltf_data[ltf_index];
 
-                if position.is_none() {
-                    if let Some(p) = pending {
-                        if ltf_index > p.placed_index {
-                            if ltf_index > p.expiry_index {
-                                pending = None;
-                            } else {
-                                let touched =
-                                    ltf_candle.low <= p.entry && ltf_candle.high >= p.entry;
-                                if touched {
-                                    let immediate_stop = match p.direction {
-                                        PositionDirection::Long => ltf_candle.low <= p.sl,
-                                        PositionDirection::Short => ltf_candle.high >= p.sl,
-                                    };
-                                    if immediate_stop {
-                                        trades.push(Trade::from_position_with_exit(
-                                            Position {
-                                                direction: p.direction,
-                                                open_time: ltf_candle.open_time,
-                                                entry: p.entry,
-                                                sl: p.sl,
-                                                tp: p.tp,
-                                                at_break_even: false,
-                                            },
-                                            ltf_candle.close_time,
-                                            p.sl,
-                                            TradeResult::Expense,
-                                            &execution,
-                                        ));
-                                    } else {
-                                        position = Some(Position {
-                                            direction: p.direction,
-                                            open_time: ltf_candle.open_time,
-                                            entry: p.entry,
-                                            sl: p.sl,
-                                            tp: p.tp,
-                                            at_break_even: false,
-                                        });
+                if let Some(setup) = current_setup.clone() {
+                    if !self.passes_time_filters(ltf_candle.open_time) {
+                        ltf_index += 1;
+                        continue;
+                    }
+                    if self.is_in_poi(ltf_candle.low, ltf_candle.high, &setup) {
+                        poi_hits += 1;
+
+                        match setup.bias {
+                            HTFBias::Bullish => {
+                                let trigger_ok = match self.config.cisd_variant {
+                                    CisdVariant::KillzoneReclaim => self.detect_killzone_reclaim(
+                                        ltf_index,
+                                        PositionDirection::Long,
+                                        &session_levels,
+                                    ),
+                                    _ => {
+                                        if self.config.require_killzone_level_hit
+                                            && !self.has_recent_killzone_level_hit(
+                                                ltf_index,
+                                                PositionDirection::Long,
+                                                &session_levels,
+                                            )
+                                        {
+                                            false
+                                        } else {
+                                            let cisd_match = self.detect_ltf_cisd(
+                                                ltf_index,
+                                                PositionDirection::Long,
+                                            );
+                                            let ifvg_match = self.has_ifvg_confirmation(
+                                                ltf_index,
+                                                PositionDirection::Long,
+                                            );
+                                            self.reversal_confirmed(cisd_match, ifvg_match)
+                                        }
                                     }
-                                    pending = None;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Manage existing position
-                if let Some(pos) = position {
-                    match pos.direction {
-                        PositionDirection::Short => {
-                            if pos.sl < ltf_candle.high {
-                                trades.push(Trade::from_position_with_exit(
-                                    pos,
-                                    ltf_candle.close_time,
-                                    pos.sl,
-                                    TradeResult::Expense,
-                                    &execution,
-                                ));
-                                position = None;
-                            } else if pos.tp > ltf_candle.low {
-                                trades.push(Trade::from_position_with_exit(
-                                    pos,
-                                    ltf_candle.close_time,
-                                    pos.tp,
-                                    TradeResult::Winner,
-                                    &execution,
-                                ));
-                                position = None;
-                            }
-                        }
-                        PositionDirection::Long => {
-                            if pos.sl > ltf_candle.low {
-                                trades.push(Trade::from_position_with_exit(
-                                    pos,
-                                    ltf_candle.close_time,
-                                    pos.sl,
-                                    TradeResult::Expense,
-                                    &execution,
-                                ));
-                                position = None;
-                            } else if pos.tp < ltf_candle.high {
-                                trades.push(Trade::from_position_with_exit(
-                                    pos,
-                                    ltf_candle.close_time,
-                                    pos.tp,
-                                    TradeResult::Winner,
-                                    &execution,
-                                ));
-                                position = None;
-                            }
-                        }
-                    }
-                }
-
-                // Look for new entry if no position and we have HTF setup
-                if position.is_none() && pending.is_none() {
-                    if let Some(setup) = current_setup.clone() {
-                        if !self.passes_time_filters(ltf_candle.open_time) {
-                            ltf_index += 1;
-                            continue;
-                        }
-                        // Check if price is in POI zone
-                        if self.is_in_poi(ltf_candle.low, ltf_candle.high, &setup) {
-                            poi_hits += 1;
-                            let mut mark_setup_used = false;
-
-                            match setup.bias {
-                                HTFBias::Bullish => {
-                                    let cisd_match =
-                                        self.detect_ltf_cisd(ltf_index, PositionDirection::Long);
-                                    let ifvg_match = self
-                                        .has_ifvg_confirmation(ltf_index, PositionDirection::Long);
-                                    if self.reversal_confirmed(cisd_match, ifvg_match) {
-                                        cisd_matches += 1;
-                                        if let Some(ob_level) = self.detect_ltf_order_block(
-                                            ltf_index,
-                                            PositionDirection::Long,
-                                        ) {
-                                            order_blocks += 1;
-                                            // Create long position
-                                            let entry =
-                                                self.select_entry(ltf_candle.close, ob_level);
-                                            let sl = ob_level
-                                                - DecimalVec(
-                                                    ob_level.0 * Decimal::from_f32(0.0005).unwrap(),
-                                                );
-                                            let risk = entry - sl;
-
-                                            if risk.0 > Decimal::ZERO {
-                                                let tp = entry
-                                                    + DecimalVec(risk.0 * self.config.rr_target);
-
-                                                if self.is_limit_variant() {
-                                                    pending = Some(PendingLimitOrder {
-                                                        direction: PositionDirection::Long,
-                                                        entry,
-                                                        sl,
-                                                        tp,
-                                                        placed_index: ltf_index,
-                                                        expiry_index: ltf_index + 24,
-                                                    });
-                                                } else {
-                                                    position = Some(Position {
-                                                        direction: PositionDirection::Long,
-                                                        open_time: ltf_candle.open_time,
-                                                        entry,
-                                                        sl,
-                                                        tp,
-                                                        at_break_even: false,
-                                                    });
-                                                }
-
-                                                mark_setup_used = true;
-                                            }
+                                };
+                                if trigger_ok {
+                                    cisd_matches += 1;
+                                    if let Some(ob_level) = self
+                                        .detect_ltf_order_block(ltf_index, PositionDirection::Long)
+                                    {
+                                        order_blocks += 1;
+                                        let entry = self.select_entry(ltf_candle.close, ob_level);
+                                        let stop_buffer =
+                                            Decimal::from(self.config.stop_buffer_bps)
+                                                / Decimal::from(10_000);
+                                        let sl = ob_level - DecimalVec(ob_level.0 * stop_buffer);
+                                        if entry > sl {
+                                            setups.push(SetupCandidate {
+                                                direction: PositionDirection::Long,
+                                                signal_index: ltf_index,
+                                                entry: self.entry_model(entry),
+                                                stop: StopModel::FixedPrice(sl),
+                                                target: TargetModel::FixedR(self.config.rr_target),
+                                                trailing: TrailingModel::None,
+                                                max_hold_bars: None,
+                                            });
                                         }
                                     }
                                 }
-                                HTFBias::Bearish => {
-                                    let cisd_match =
-                                        self.detect_ltf_cisd(ltf_index, PositionDirection::Short);
-                                    let ifvg_match = self
-                                        .has_ifvg_confirmation(ltf_index, PositionDirection::Short);
-                                    if self.reversal_confirmed(cisd_match, ifvg_match) {
-                                        cisd_matches += 1;
-                                        if let Some(ob_level) = self.detect_ltf_order_block(
-                                            ltf_index,
-                                            PositionDirection::Short,
-                                        ) {
-                                            order_blocks += 1;
-                                            // Create short position
-                                            let entry =
-                                                self.select_entry(ltf_candle.close, ob_level);
-                                            let sl = ob_level
-                                                + DecimalVec(
-                                                    ob_level.0 * Decimal::from_f32(0.0005).unwrap(),
-                                                );
-                                            let risk = sl - entry;
-
-                                            if risk.0 > Decimal::ZERO {
-                                                let tp = entry
-                                                    - DecimalVec(risk.0 * self.config.rr_target);
-
-                                                if self.is_limit_variant() {
-                                                    pending = Some(PendingLimitOrder {
-                                                        direction: PositionDirection::Short,
-                                                        entry,
-                                                        sl,
-                                                        tp,
-                                                        placed_index: ltf_index,
-                                                        expiry_index: ltf_index + 24,
-                                                    });
-                                                } else {
-                                                    position = Some(Position {
-                                                        direction: PositionDirection::Short,
-                                                        open_time: ltf_candle.open_time,
-                                                        entry,
-                                                        sl,
-                                                        tp,
-                                                        at_break_even: false,
-                                                    });
-                                                }
-
-                                                mark_setup_used = true;
-                                            }
+                            }
+                            HTFBias::Bearish => {
+                                let trigger_ok = match self.config.cisd_variant {
+                                    CisdVariant::KillzoneReclaim => self.detect_killzone_reclaim(
+                                        ltf_index,
+                                        PositionDirection::Short,
+                                        &session_levels,
+                                    ),
+                                    _ => {
+                                        if self.config.require_killzone_level_hit
+                                            && !self.has_recent_killzone_level_hit(
+                                                ltf_index,
+                                                PositionDirection::Short,
+                                                &session_levels,
+                                            )
+                                        {
+                                            false
+                                        } else {
+                                            let cisd_match = self.detect_ltf_cisd(
+                                                ltf_index,
+                                                PositionDirection::Short,
+                                            );
+                                            let ifvg_match = self.has_ifvg_confirmation(
+                                                ltf_index,
+                                                PositionDirection::Short,
+                                            );
+                                            self.reversal_confirmed(cisd_match, ifvg_match)
+                                        }
+                                    }
+                                };
+                                if trigger_ok {
+                                    cisd_matches += 1;
+                                    if let Some(ob_level) = self
+                                        .detect_ltf_order_block(ltf_index, PositionDirection::Short)
+                                    {
+                                        order_blocks += 1;
+                                        let entry = self.select_entry(ltf_candle.close, ob_level);
+                                        let stop_buffer =
+                                            Decimal::from(self.config.stop_buffer_bps)
+                                                / Decimal::from(10_000);
+                                        let sl = ob_level + DecimalVec(ob_level.0 * stop_buffer);
+                                        if sl > entry {
+                                            setups.push(SetupCandidate {
+                                                direction: PositionDirection::Short,
+                                                signal_index: ltf_index,
+                                                entry: self.entry_model(entry),
+                                                stop: StopModel::FixedPrice(sl),
+                                                target: TargetModel::FixedR(self.config.rr_target),
+                                                trailing: TrailingModel::None,
+                                                max_hold_bars: None,
+                                            });
                                         }
                                     }
                                 }
-                                HTFBias::None => {}
                             }
-
-                            if mark_setup_used {
-                                if let Some(ref mut setup_mut) = current_setup {
-                                    setup_mut.used = true;
-                                }
-                            }
+                            HTFBias::None => {}
                         }
                     }
                 }
@@ -822,10 +1113,32 @@ impl TradingModel for TTradesFractalMTF {
         }
 
         if self.config.log_progress {
-            println!("  Total trades: {}", trades.len());
             println!("  POI hits: {}", poi_hits);
             println!("  CISD matches: {}", cisd_matches);
             println!("  Order blocks: {}", order_blocks);
+        }
+
+        setups
+    }
+}
+
+impl TradingModel for TTradesFractalMTF {
+    fn execute(&self) -> BacktestResult {
+        let setups = self.detect_setups();
+        let (trades, metrics) =
+            run_setups_with_metrics(&self.ltf_data, &setups, &self.execution_config());
+
+        if self.config.log_progress {
+            println!("  Setups: {}", metrics.setup_count);
+            println!("  Limit orders placed: {}", metrics.limit_orders_placed);
+            println!("  Limit orders filled: {}", metrics.limit_orders_filled);
+            println!("  Limit orders expired: {}", metrics.limit_orders_expired);
+            println!("  Skipped same dir: {}", metrics.skipped_open_same_dir);
+            println!(
+                "  Skipped opposite dir: {}",
+                metrics.skipped_open_opposite_dir
+            );
+            println!("  Total trades: {}", trades.len());
         }
 
         BacktestResult {

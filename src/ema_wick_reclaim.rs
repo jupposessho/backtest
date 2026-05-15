@@ -7,9 +7,9 @@ use backtest::model::trade::Trade;
 use backtest::model::trade_result::TradeResult;
 use backtest::to_new_york_time;
 use chrono::{Datelike, NaiveDate, TimeZone, Timelike, Utc};
-use std::collections::BTreeMap;
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy)]
 struct EmaPoint {
@@ -106,10 +106,16 @@ fn ema_series(candles: &[CandleStick], period: usize) -> Vec<EmaPoint> {
 
 fn date_cutoff_utc(date: &str) -> i64 {
     let d = NaiveDate::parse_from_str(date, "%Y-%m-%d").expect("invalid date");
-    Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).expect("midnight")).timestamp()
+    Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).expect("midnight"))
+        .timestamp()
 }
 
-fn run_wick_reclaim(tf_candles: &[CandleStick], ema_5m: &[EmaPoint], from_ts: i64, rr: Decimal) -> Vec<Trade> {
+fn run_wick_reclaim(
+    tf_candles: &[CandleStick],
+    ema_5m: &[EmaPoint],
+    from_ts: i64,
+    rr: Decimal,
+) -> Vec<Trade> {
     run_wick_reclaim_cfg(
         tf_candles,
         ema_5m,
@@ -222,7 +228,11 @@ fn run_wick_reclaim_cfg(
             let start = i - atr_period + 1;
             for k in start..=i {
                 let cur = tf_candles[k];
-                let prev_close = if k > 0 { tf_candles[k - 1].close.0 } else { cur.close.0 };
+                let prev_close = if k > 0 {
+                    tf_candles[k - 1].close.0
+                } else {
+                    cur.close.0
+                };
                 let tr1 = cur.high.0 - cur.low.0;
                 let tr2 = (cur.high.0 - prev_close).abs();
                 let tr3 = (cur.low.0 - prev_close).abs();
@@ -321,12 +331,22 @@ fn run_wick_reclaim_cfg(
 
 fn print_results(label: &str, trades: &[Trade]) {
     let total = trades.len();
-    let wins = trades.iter().filter(|t| t.result == TradeResult::Winner).count();
-    let losses = trades.iter().filter(|t| t.result == TradeResult::Expense).count();
-    let breakeven = trades.iter().filter(|t| t.result == TradeResult::BreakEven).count();
+    let wins = trades
+        .iter()
+        .filter(|t| t.result == TradeResult::Winner)
+        .count();
+    let losses = trades
+        .iter()
+        .filter(|t| t.result == TradeResult::Expense)
+        .count();
+    let breakeven = trades
+        .iter()
+        .filter(|t| t.result == TradeResult::BreakEven)
+        .count();
 
     let win_rate = if total > 0 {
-        Decimal::from_usize(wins).unwrap() * Decimal::from(100) / Decimal::from_usize(total).unwrap()
+        Decimal::from_usize(wins).unwrap() * Decimal::from(100)
+            / Decimal::from_usize(total).unwrap()
     } else {
         Decimal::ZERO
     };
@@ -354,7 +374,10 @@ fn print_results(label: &str, trades: &[Trade]) {
     println!("net R: {}", gross_r.round_dp(2));
     println!("expectancy R/trade: {}", expectancy.round_dp(4));
     println!("net USD (fixed $10/R): ${}", fixed_net_usd.round_dp(2));
-    println!("net USD (compounded, start $1000): ${}", compounded_net_usd.round_dp(2));
+    println!(
+        "net USD (compounded, start $1000): ${}",
+        compounded_net_usd.round_dp(2)
+    );
 }
 
 fn net_r_after_costs(trades: &[Trade], round_trip_bps: Decimal, slippage_bps: Decimal) -> Decimal {
@@ -375,7 +398,11 @@ fn net_r_after_costs(trades: &[Trade], round_trip_bps: Decimal, slippage_bps: De
     net
 }
 
-fn max_drawdown_pct_from_r(trades: &[Trade], round_trip_bps: Decimal, slippage_bps: Decimal) -> Decimal {
+fn max_drawdown_pct_from_r(
+    trades: &[Trade],
+    round_trip_bps: Decimal,
+    slippage_bps: Decimal,
+) -> Decimal {
     let mut bal = Decimal::from(1000);
     let risk_pct = Decimal::new(1, 2);
     let mut peak = bal;
@@ -406,7 +433,12 @@ fn max_drawdown_pct_from_r(trades: &[Trade], round_trip_bps: Decimal, slippage_b
     max_dd.round_dp(2)
 }
 
-fn monthly_validation(label: &str, trades: &[Trade], round_trip_bps: Decimal, slippage_bps: Decimal) {
+fn monthly_validation(
+    label: &str,
+    trades: &[Trade],
+    round_trip_bps: Decimal,
+    slippage_bps: Decimal,
+) {
     let mut monthly: BTreeMap<String, Decimal> = BTreeMap::new();
     let bps_to_frac = Decimal::new(1, 4);
     let total_bps = round_trip_bps + slippage_bps;
@@ -435,7 +467,12 @@ fn monthly_validation(label: &str, trades: &[Trade], round_trip_bps: Decimal, sl
         }
     }
     println!("\n{} monthly validation (net R after costs)", label);
-    println!("positive months: {} | negative months: {} | total months: {}", pos, neg, monthly.len());
+    println!(
+        "positive months: {} | negative months: {} | total months: {}",
+        pos,
+        neg,
+        monthly.len()
+    );
     for (k, v) in monthly.iter() {
         println!("{}: {}R", k, v.round_dp(2));
     }
@@ -459,7 +496,9 @@ fn main() {
 
     let from_ts = date_cutoff_utc("2025-01-01");
     println!("EMA wick reclaim strategy");
-    println!("rule: wick through EMA200(5m) then close back, SL=signal wick, one position at a time");
+    println!(
+        "rule: wick through EMA200(5m) then close back, SL=signal wick, one position at a time"
+    );
     println!("start date: 2025-01-01");
 
     let rrs = [
@@ -538,7 +577,10 @@ fn main() {
     }
 
     println!("\n===== Reality Validation (finalists) =====");
-    println!("assumptions: round-trip fees={} bps, round-trip slippage={} bps", fees_rt_bps, slippage_rt_bps);
+    println!(
+        "assumptions: round-trip fees={} bps, round-trip slippage={} bps",
+        fees_rt_bps, slippage_rt_bps
+    );
     println!(
         "filters: min_stop_ticks={}, tick_size={}, atr_floor_mult={}, atr_period={}, max_cost_r={}",
         min_stop_ticks, tick_size, atr_floor_mult, atr_period, max_cost_r
@@ -579,10 +621,24 @@ fn main() {
 
     let net_r_1m = net_r_after_costs(&t1, fees_rt_bps, slippage_rt_bps);
     let net_r_3m = net_r_after_costs(&t3, fees_rt_bps, slippage_rt_bps);
-    println!("1m rr=4 all | net after costs: {}R | fixed-risk USD: ${}", net_r_1m.round_dp(2), (net_r_1m * Decimal::from(10)).round_dp(2));
-    println!("3m rr=4 all | net after costs: {}R | fixed-risk USD: ${}", net_r_3m.round_dp(2), (net_r_3m * Decimal::from(10)).round_dp(2));
-    println!("1m rr=4 all | max drawdown: {}%", max_drawdown_pct_from_r(&t1, fees_rt_bps, slippage_rt_bps));
-    println!("3m rr=4 all | max drawdown: {}%", max_drawdown_pct_from_r(&t3, fees_rt_bps, slippage_rt_bps));
+    println!(
+        "1m rr=4 all | net after costs: {}R | fixed-risk USD: ${}",
+        net_r_1m.round_dp(2),
+        (net_r_1m * Decimal::from(10)).round_dp(2)
+    );
+    println!(
+        "3m rr=4 all | net after costs: {}R | fixed-risk USD: ${}",
+        net_r_3m.round_dp(2),
+        (net_r_3m * Decimal::from(10)).round_dp(2)
+    );
+    println!(
+        "1m rr=4 all | max drawdown: {}%",
+        max_drawdown_pct_from_r(&t1, fees_rt_bps, slippage_rt_bps)
+    );
+    println!(
+        "3m rr=4 all | max drawdown: {}%",
+        max_drawdown_pct_from_r(&t3, fees_rt_bps, slippage_rt_bps)
+    );
 
     monthly_validation("1m rr=4 all", &t1, fees_rt_bps, slippage_rt_bps);
     monthly_validation("3m rr=4 all", &t3, fees_rt_bps, slippage_rt_bps);
@@ -646,10 +702,14 @@ fn main() {
     ];
 
     for (entry_tf, ema_tf, trades) in cases {
-        let wins = trades.iter().filter(|t| t.result == TradeResult::Winner).count();
+        let wins = trades
+            .iter()
+            .filter(|t| t.result == TradeResult::Winner)
+            .count();
         let total = trades.len();
         let win_rate = if total > 0 {
-            Decimal::from_usize(wins).unwrap() * Decimal::from(100) / Decimal::from_usize(total).unwrap()
+            Decimal::from_usize(wins).unwrap() * Decimal::from(100)
+                / Decimal::from_usize(total).unwrap()
         } else {
             Decimal::ZERO
         };

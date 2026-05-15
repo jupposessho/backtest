@@ -82,15 +82,39 @@ fn main() {
     let sol1 = load("assets/binance_SOLUSDT_1h.json");
 
     let cfgs = [
-        Cfg { name: "close_cisd_or_ifvg_rr1.5_london_ny_poi0_ob10", entry: EntryVariant::Close, confirm: ReversalConfirmMode::CisdOrIfvg, rr: Decimal::new(15,1), kz: KillzoneMode::LondonNy, poi:0, ob:10 },
-        Cfg { name: "close_cisd_only_rr1.5_london_ny_poi0_ob10", entry: EntryVariant::Close, confirm: ReversalConfirmMode::CisdOnly, rr: Decimal::new(15,1), kz: KillzoneMode::LondonNy, poi:0, ob:10 },
-        Cfg { name: "close_cisd_or_ifvg_rr1.2_london_ny_poi0_ob10", entry: EntryVariant::Close, confirm: ReversalConfirmMode::CisdOrIfvg, rr: Decimal::new(12,1), kz: KillzoneMode::LondonNy, poi:0, ob:10 },
+        Cfg {
+            name: "close_cisd_or_ifvg_rr1.5_london_ny_poi0_ob10",
+            entry: EntryVariant::Close,
+            confirm: ReversalConfirmMode::CisdOrIfvg,
+            rr: Decimal::new(15, 1),
+            kz: KillzoneMode::LondonNy,
+            poi: 0,
+            ob: 10,
+        },
+        Cfg {
+            name: "close_cisd_only_rr1.5_london_ny_poi0_ob10",
+            entry: EntryVariant::Close,
+            confirm: ReversalConfirmMode::CisdOnly,
+            rr: Decimal::new(15, 1),
+            kz: KillzoneMode::LondonNy,
+            poi: 0,
+            ob: 10,
+        },
+        Cfg {
+            name: "close_cisd_or_ifvg_rr1.2_london_ny_poi0_ob10",
+            entry: EntryVariant::Close,
+            confirm: ReversalConfirmMode::CisdOrIfvg,
+            rr: Decimal::new(12, 1),
+            kz: KillzoneMode::LondonNy,
+            poi: 0,
+            ob: 10,
+        },
     ];
 
     for c in cfgs {
-        let (o_btc, r_btc) = eval_asset(Arc::clone(&btc5), btc1.clone(), Decimal::new(2,2), c);
-        let (o_eth, r_eth) = eval_asset(Arc::clone(&eth5), eth1.clone(), Decimal::new(2,2), c);
-        let (o_sol, r_sol) = eval_asset(Arc::clone(&sol5), sol1.clone(), Decimal::new(1,3), c);
+        let (o_btc, r_btc) = eval_asset(Arc::clone(&btc5), btc1.clone(), Decimal::new(2, 2), c);
+        let (o_eth, r_eth) = eval_asset(Arc::clone(&eth5), eth1.clone(), Decimal::new(2, 2), c);
+        let (o_sol, r_sol) = eval_asset(Arc::clone(&sol5), sol1.clone(), Decimal::new(1, 3), c);
 
         let mut o_pool = BTreeMap::<String, Decimal>::new();
         let mut r_pool = BTreeMap::<String, Decimal>::new();

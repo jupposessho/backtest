@@ -6,12 +6,15 @@ use clap::{Arg, Command};
 use backtest::{
     candle_stick_loader::{CandleDataSource, CandleStickLoader},
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::orb_london_reversal::{OrbLondonReversal, OrbLondonReversalConfig},
 };
 
 fn load_parquet(path: &str) -> Vec<CandleStick> {
-    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path)).expect("failed loading parquet")
+    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
+        .expect("failed loading parquet")
 }
 
 fn run_case(data: &[CandleStick], config: OrbLondonReversalConfig) -> BacktestResult {
@@ -62,7 +65,10 @@ fn main() {
     println!("\nORB London Reversal Sweep");
     println!("source: {}", source);
     println!("bars: {}", data.len());
-    println!("\n{:<10} {:<8} {:>8} {:>8} {:>9} {:>9}", "orb", "close", "trades", "win%", "profit_r", "pnl%");
+    println!(
+        "\n{:<10} {:<8} {:>8} {:>8} {:>9} {:>9}",
+        "orb", "close", "trades", "win%", "profit_r", "pnl%"
+    );
     println!("{}", "-".repeat(62));
 
     for window in orb_windows {

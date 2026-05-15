@@ -8,7 +8,9 @@ use std::env;
 use backtest::{
     candle_stick_loader::CandleStickLoader,
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::mc::{
         EntryMode, ExecutionConfig, FvgConfig, FvgTimeframe, LevelFilters, MarketEntryMode, Mc,
         McConfig, McMode, SignalPattern, SignalQualityConfig, TimeWindow, TrailingStopConfig,
@@ -17,39 +19,27 @@ use backtest::{
 };
 
 fn load_binance_5m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_5m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_5m.json"))
 }
 
 fn load_binance_15m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_15m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_15m.json"))
 }
 
 fn load_binance_30m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_30m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_30m.json"))
 }
 
 fn load_binance_1h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_1h.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_1h.json"))
 }
 
 fn load_binance_4h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_4h.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_4h.json"))
 }
 
 fn load_binance_12h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_12h.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_12h.json"))
 }
 
 #[derive(Clone)]
@@ -85,8 +75,7 @@ fn compute_stats(label: &'static str, result: &BacktestResult) -> Stats {
     let win_rate = if total == 0 {
         Decimal::ZERO
     } else {
-        (Decimal::from_i32(winners as i32).unwrap()
-            / Decimal::from_i32(total as i32).unwrap()
+        (Decimal::from_i32(winners as i32).unwrap() / Decimal::from_i32(total as i32).unwrap()
             * Decimal::from(100))
         .trunc_with_scale(2)
     };
@@ -99,7 +88,11 @@ fn compute_stats(label: &'static str, result: &BacktestResult) -> Stats {
     } else {
         Decimal::ZERO
     };
-    let total_costs = trades.iter().map(|t| t.total_costs()).sum::<Decimal>().trunc_with_scale(2);
+    let total_costs = trades
+        .iter()
+        .map(|t| t.total_costs())
+        .sum::<Decimal>()
+        .trunc_with_scale(2);
 
     Stats {
         label,
@@ -222,11 +215,21 @@ fn main() {
 
     use backtest::strategies::mc::TrailingStopMode;
 
-    let trail_none = TrailingStopConfig { mode: TrailingStopMode::None };
-    let trail_be1r = TrailingStopConfig { mode: TrailingStopMode::BreakEven1R };
-    let trail_05r_at_15r = TrailingStopConfig { mode: TrailingStopMode::Trail05RAt15R };
-    let trail_1r_at_2r = TrailingStopConfig { mode: TrailingStopMode::Trail1RAt2R };
-    let trail_progressive = TrailingStopConfig { mode: TrailingStopMode::Progressive };
+    let trail_none = TrailingStopConfig {
+        mode: TrailingStopMode::None,
+    };
+    let trail_be1r = TrailingStopConfig {
+        mode: TrailingStopMode::BreakEven1R,
+    };
+    let trail_05r_at_15r = TrailingStopConfig {
+        mode: TrailingStopMode::Trail05RAt15R,
+    };
+    let trail_1r_at_2r = TrailingStopConfig {
+        mode: TrailingStopMode::Trail1RAt2R,
+    };
+    let trail_progressive = TrailingStopConfig {
+        mode: TrailingStopMode::Progressive,
+    };
 
     // Test cases to run (we'll run these for each timeframe)
     let test_cases = vec![
@@ -287,7 +290,10 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_none.clone(),
             ),
         ),
@@ -299,7 +305,10 @@ fn main() {
                 EntryMode::PrevOpen,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_none.clone(),
             ),
         ),
@@ -311,7 +320,10 @@ fn main() {
                 EntryMode::Close,
                 rr_1_5,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_none.clone(),
             ),
         ),
@@ -323,7 +335,10 @@ fn main() {
                 EntryMode::PrevOpen,
                 rr_1_5,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_none.clone(),
             ),
         ),
@@ -383,7 +398,10 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_none.clone(),
             ),
         ),
@@ -395,7 +413,10 @@ fn main() {
                 EntryMode::PrevOpen,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_none.clone(),
             ),
         ),
@@ -423,7 +444,6 @@ fn main() {
                 trail_none.clone(),
             ),
         ),
-
         // === TRAILING STOP VARIANTS ===
         // Reversal Daily with trailing stops
         (
@@ -474,7 +494,6 @@ fn main() {
                 trail_progressive.clone(),
             ),
         ),
-
         // Continuation EMA with trailing stops
         (
             "cont_ema200_rr2_close_BE1R",
@@ -484,7 +503,10 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_be1r.clone(),
             ),
         ),
@@ -496,7 +518,10 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_05r_at_15r.clone(),
             ),
         ),
@@ -508,7 +533,10 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_1r_at_2r.clone(),
             ),
         ),
@@ -520,11 +548,13 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_progressive.clone(),
             ),
         ),
-
         // Continuation Structure with trailing stops
         (
             "cont_struct_rr2_close_BE1R",
@@ -574,7 +604,6 @@ fn main() {
                 trail_progressive.clone(),
             ),
         ),
-
         // Engulfing with trailing stops
         (
             "rev_daily_engulf_rr2_close_PROG",
@@ -596,119 +625,126 @@ fn main() {
                 EntryMode::Close,
                 rr_2,
                 false,
-                TrendFilter::Ema { fast: 50, slow: 200 },
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trail_progressive.clone(),
             ),
         ),
-        (
-            "flt_engulf_ema200_rr2_close_fvg",
-            {
-                let mut cfg = config_with(
-                    McMode::ContinuationEma200,
-                    SignalPattern::Engulfing,
-                    EntryMode::Close,
-                    rr_2,
-                    false,
-                    TrendFilter::Ema { fast: 50, slow: 200 },
-                    trail_none.clone(),
-                );
-                cfg.fvg_filter = FvgConfig {
-                    enabled: true,
-                    timeframes: vec![FvgTimeframe::H1, FvgTimeframe::H4],
-                    touch_window_candles: 2,
-                };
-                cfg
-            },
-        ),
-        (
-            "flt_engulf_ema200_rr2_prevopen_fvg",
-            {
-                let mut cfg = config_with(
-                    McMode::ContinuationEma200,
-                    SignalPattern::Engulfing,
-                    EntryMode::PrevOpen,
-                    rr_2,
-                    false,
-                    TrendFilter::Ema { fast: 50, slow: 200 },
-                    trail_none.clone(),
-                );
-                cfg.fvg_filter = FvgConfig {
-                    enabled: true,
-                    timeframes: vec![FvgTimeframe::H1, FvgTimeframe::H4],
-                    touch_window_candles: 2,
-                };
-                cfg
-            },
-        ),
-        (
-            "flt_engulf_ema200_rr2_close_narrow",
-            {
-                let mut cfg = config_with(
-                    McMode::ContinuationEma200,
-                    SignalPattern::Engulfing,
-                    EntryMode::Close,
-                    rr_2,
-                    false,
-                    TrendFilter::Ema { fast: 50, slow: 200 },
-                    trail_none.clone(),
-                );
-                cfg.trade_window = Some(TimeWindow {
-                    start: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
-                    end: NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
-                });
-                cfg
-            },
-        ),
-        (
-            "flt_engulf_ema200_rr2_close_quality",
-            {
-                let mut cfg = config_with(
-                    McMode::ContinuationEma200,
-                    SignalPattern::Engulfing,
-                    EntryMode::Close,
-                    rr_2,
-                    false,
-                    TrendFilter::Ema { fast: 50, slow: 200 },
-                    trail_none.clone(),
-                );
-                cfg.signal_quality = SignalQualityConfig {
-                    min_body_to_range: Decimal::from_f32(0.60).unwrap(),
-                    min_range_to_prev_range: Decimal::from_f32(1.10).unwrap(),
-                    min_range_to_avg_range: Decimal::from_f32(1.20).unwrap(),
-                    avg_range_lookback: 20,
-                };
-                cfg
-            },
-        ),
-        (
-            "flt_engulf_ema200_rr2_prevopen_quality",
-            {
-                let mut cfg = config_with(
-                    McMode::ContinuationEma200,
-                    SignalPattern::Engulfing,
-                    EntryMode::PrevOpen,
-                    rr_2,
-                    false,
-                    TrendFilter::Ema { fast: 50, slow: 200 },
-                    trail_none.clone(),
-                );
-                cfg.signal_quality = SignalQualityConfig {
-                    min_body_to_range: Decimal::from_f32(0.60).unwrap(),
-                    min_range_to_prev_range: Decimal::from_f32(1.10).unwrap(),
-                    min_range_to_avg_range: Decimal::from_f32(1.20).unwrap(),
-                    avg_range_lookback: 20,
-                };
-                cfg
-            },
-        ),
+        ("flt_engulf_ema200_rr2_close_fvg", {
+            let mut cfg = config_with(
+                McMode::ContinuationEma200,
+                SignalPattern::Engulfing,
+                EntryMode::Close,
+                rr_2,
+                false,
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
+                trail_none.clone(),
+            );
+            cfg.fvg_filter = FvgConfig {
+                enabled: true,
+                timeframes: vec![FvgTimeframe::H1, FvgTimeframe::H4],
+                touch_window_candles: 2,
+            };
+            cfg
+        }),
+        ("flt_engulf_ema200_rr2_prevopen_fvg", {
+            let mut cfg = config_with(
+                McMode::ContinuationEma200,
+                SignalPattern::Engulfing,
+                EntryMode::PrevOpen,
+                rr_2,
+                false,
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
+                trail_none.clone(),
+            );
+            cfg.fvg_filter = FvgConfig {
+                enabled: true,
+                timeframes: vec![FvgTimeframe::H1, FvgTimeframe::H4],
+                touch_window_candles: 2,
+            };
+            cfg
+        }),
+        ("flt_engulf_ema200_rr2_close_narrow", {
+            let mut cfg = config_with(
+                McMode::ContinuationEma200,
+                SignalPattern::Engulfing,
+                EntryMode::Close,
+                rr_2,
+                false,
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
+                trail_none.clone(),
+            );
+            cfg.trade_window = Some(TimeWindow {
+                start: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+                end: NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
+            });
+            cfg
+        }),
+        ("flt_engulf_ema200_rr2_close_quality", {
+            let mut cfg = config_with(
+                McMode::ContinuationEma200,
+                SignalPattern::Engulfing,
+                EntryMode::Close,
+                rr_2,
+                false,
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
+                trail_none.clone(),
+            );
+            cfg.signal_quality = SignalQualityConfig {
+                min_body_to_range: Decimal::from_f32(0.60).unwrap(),
+                min_range_to_prev_range: Decimal::from_f32(1.10).unwrap(),
+                min_range_to_avg_range: Decimal::from_f32(1.20).unwrap(),
+                avg_range_lookback: 20,
+            };
+            cfg
+        }),
+        ("flt_engulf_ema200_rr2_prevopen_quality", {
+            let mut cfg = config_with(
+                McMode::ContinuationEma200,
+                SignalPattern::Engulfing,
+                EntryMode::PrevOpen,
+                rr_2,
+                false,
+                TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
+                trail_none.clone(),
+            );
+            cfg.signal_quality = SignalQualityConfig {
+                min_body_to_range: Decimal::from_f32(0.60).unwrap(),
+                min_range_to_prev_range: Decimal::from_f32(1.10).unwrap(),
+                min_range_to_avg_range: Decimal::from_f32(1.20).unwrap(),
+                avg_range_lookback: 20,
+            };
+            cfg
+        }),
     ];
 
     // Run all test cases for each timeframe
     for (tf_name, candlesticks) in timeframes {
         println!("\n");
-        println!("╔═══════════════════════════════════════════════════════════════════════════════╗");
+        println!(
+            "╔═══════════════════════════════════════════════════════════════════════════════╗"
+        );
         println!("║  TIMEFRAME: {:^68} ║", tf_name);
-        println!("╚═══════════════════════════════════════════════════════════════════════════════╝");
+        println!(
+            "╚═══════════════════════════════════════════════════════════════════════════════╝"
+        );
 
         run_all_cases(tf_name, &candlesticks, &test_cases);
     }
@@ -729,11 +765,24 @@ fn main() {
     println!("\nExample: Balance of $19,311.70 means you turned $1000 into $19,311.70");
 }
 
-fn run_all_cases(tf_name: &str, candlesticks: &Vec<CandleStick>, test_cases: &Vec<(&'static str, McConfig)>) {
+fn run_all_cases(
+    tf_name: &str,
+    candlesticks: &Vec<CandleStick>,
+    test_cases: &Vec<(&'static str, McConfig)>,
+) {
     println!("\n=== BASELINE (No Trailing Stops) ===");
     println!(
         "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12} {:>12}",
-        "case", "trades", "win_rate", "wins", "losses", "b/e", "max_dd%", "profit_factor", "balance", "costs"
+        "case",
+        "trades",
+        "win_rate",
+        "wins",
+        "losses",
+        "b/e",
+        "max_dd%",
+        "profit_factor",
+        "balance",
+        "costs"
     );
 
     for (i, (label, cfg)) in test_cases.iter().enumerate() {
@@ -742,7 +791,16 @@ fn run_all_cases(tf_name: &str, candlesticks: &Vec<CandleStick>, test_cases: &Ve
             println!("\n=== TRAILING STOP VARIANTS ===");
             println!(
                 "{:<28} {:>7} {:>10} {:>8} {:>8} {:>8} {:>12} {:>13} {:>12} {:>12}",
-                "case", "trades", "win_rate", "wins", "losses", "b/e", "max_dd%", "profit_factor", "balance", "costs"
+                "case",
+                "trades",
+                "win_rate",
+                "wins",
+                "losses",
+                "b/e",
+                "max_dd%",
+                "profit_factor",
+                "balance",
+                "costs"
             );
         } else if i == 20 {
             println!("\n--- Continuation EMA200 Trailing Variants ---");

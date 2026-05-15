@@ -8,7 +8,9 @@ use rust_decimal::Decimal;
 use backtest::{
     candle_stick_loader::{CandleDataSource, CandleStickLoader},
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::orb_london_reversal::{OrbLondonReversal, OrbLondonReversalConfig},
 };
 
@@ -40,10 +42,22 @@ struct Preset {
 }
 
 fn load_parquet(path: &str) -> Vec<CandleStick> {
-    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path)).expect("failed loading parquet")
+    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
+        .expect("failed loading parquet")
 }
 
-fn summarize(result: &BacktestResult) -> (usize, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal) {
+fn summarize(
+    result: &BacktestResult,
+) -> (
+    usize,
+    Decimal,
+    Decimal,
+    Decimal,
+    Decimal,
+    Decimal,
+    Decimal,
+    Decimal,
+) {
     let total = result.number_of_trades();
     let wins = result.result(TradeResult::Winner);
     let win_rate = if total == 0 {
@@ -135,7 +149,8 @@ fn run_case(
         config: cfg,
     });
 
-    let (trades, win_rate, pf, max_dd, profit_r, pnl_pct, net_profit_usd, max_dd_usd) = summarize(&result);
+    let (trades, win_rate, pf, max_dd, profit_r, pnl_pct, net_profit_usd, max_dd_usd) =
+        summarize(&result);
 
     Row {
         profile,
@@ -241,11 +256,7 @@ fn main() {
         },
     ];
 
-    let datasets: [(&str, &Vec<CandleStick>); 3] = [
-        ("MNQ", &mnq),
-        ("MES", &mes),
-        ("GOLD", &gold),
-    ];
+    let datasets: [(&str, &Vec<CandleStick>); 3] = [("MNQ", &mnq), ("MES", &mes), ("GOLD", &gold)];
 
     let mut rows: Vec<Row> = Vec::new();
     for (asset, data) in &datasets {
@@ -285,12 +296,28 @@ fn main() {
     }
 
     println!();
-    println!("╔══════════════════════════════════════════════════════════════════════════════════╗");
+    println!(
+        "╔══════════════════════════════════════════════════════════════════════════════════╗"
+    );
     println!("║                      ORB LONDON REVERSAL — SUMMARY MATRIX                       ║");
-    println!("╚══════════════════════════════════════════════════════════════════════════════════╝");
+    println!(
+        "╚══════════════════════════════════════════════════════════════════════════════════╝"
+    );
     println!();
-    println!("{:<10} {:<6} {:<5} {:<6} {:>7} {:>7} {:>6} {:>8} {:>10} {:>8} {:>11} {:>10}",
-        "profile", "asset", "orb", "close", "trades", "win%", "pf", "maxdd%", "profit_r", "pnl%", "net_usd", "maxdd_usd"
+    println!(
+        "{:<10} {:<6} {:<5} {:<6} {:>7} {:>7} {:>6} {:>8} {:>10} {:>8} {:>11} {:>10}",
+        "profile",
+        "asset",
+        "orb",
+        "close",
+        "trades",
+        "win%",
+        "pf",
+        "maxdd%",
+        "profit_r",
+        "pnl%",
+        "net_usd",
+        "maxdd_usd"
     );
     println!("{}", "-".repeat(120));
 

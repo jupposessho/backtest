@@ -115,7 +115,12 @@ fn main() {
             total += *v;
             *pooled.entry(k.clone()).or_insert(Decimal::ZERO) += *v;
         }
-        println!("asset={} trades={} six_month_like_total={:.2}", leg.asset, trades, total.round_dp(2));
+        println!(
+            "asset={} trades={} six_month_like_total={:.2}",
+            leg.asset,
+            trades,
+            total.round_dp(2)
+        );
     }
 
     let months: Vec<_> = pooled.iter().collect();

@@ -7,47 +7,37 @@ use rust_decimal::Decimal;
 use backtest::{
     candle_stick_loader::CandleStickLoader,
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::mc::{
-        EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig,
-        McMode, SignalPattern, TimeWindow, TrailingStopConfig, TrailingStopMode, TrendFilter,
+        EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, Mc, McConfig, McMode,
+        SignalPattern, TimeWindow, TrailingStopConfig, TrailingStopMode, TrendFilter,
     },
 };
 
 fn load_binance_5m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_5m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_5m.json"))
 }
 
 fn load_binance_15m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_15m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_15m.json"))
 }
 
 fn load_binance_30m() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_30m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_30m.json"))
 }
 
 fn load_binance_1h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_1h.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_1h.json"))
 }
 
 fn load_binance_4h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_4h.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_4h.json"))
 }
 
 fn load_binance_12h() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_12h.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_12h.json"))
 }
 
 #[derive(Clone, Debug)]
@@ -84,8 +74,7 @@ fn compute_stats(label: String, timeframe: String, result: &BacktestResult) -> S
     let win_rate = if total == 0 {
         Decimal::ZERO
     } else {
-        (Decimal::from_i32(winners as i32).unwrap()
-            / Decimal::from_i32(total as i32).unwrap()
+        (Decimal::from_i32(winners as i32).unwrap() / Decimal::from_i32(total as i32).unwrap()
             * Decimal::from(100))
         .trunc_with_scale(2)
     };
@@ -98,7 +87,11 @@ fn compute_stats(label: String, timeframe: String, result: &BacktestResult) -> S
     } else {
         Decimal::ZERO
     };
-    let total_costs = trades.iter().map(|t| t.total_costs()).sum::<Decimal>().trunc_with_scale(2);
+    let total_costs = trades
+        .iter()
+        .map(|t| t.total_costs())
+        .sum::<Decimal>()
+        .trunc_with_scale(2);
 
     Stats {
         label,
@@ -216,15 +209,99 @@ fn main() {
 
     // Define top baseline strategies only (no trailing variants)
     let strategies = vec![
-        ("rev_daily_rr2_close", McMode::ReversalDaily, SignalPattern::Mc, EntryMode::Close, rr_2, true, TrendFilter::None),
-        ("rev_daily_rr2_prevopen", McMode::ReversalDaily, SignalPattern::Mc, EntryMode::PrevOpen, rr_2, true, TrendFilter::None),
-        ("cont_ema200_rr2_prevopen", McMode::ContinuationEma200, SignalPattern::Mc, EntryMode::PrevOpen, rr_2, false, TrendFilter::Ema { fast: 50, slow: 200 }),
-        ("cont_ema200_rr1.5_prevopen", McMode::ContinuationEma200, SignalPattern::Mc, EntryMode::PrevOpen, rr_1_5, false, TrendFilter::Ema { fast: 50, slow: 200 }),
-        ("cont_struct_rr2_prevopen", McMode::ContinuationStructure, SignalPattern::Mc, EntryMode::PrevOpen, rr_2, false, TrendFilter::MarketStructure),
-        ("rev_daily_engulf_rr2_prevopen", McMode::ReversalDaily, SignalPattern::Engulfing, EntryMode::PrevOpen, rr_2, true, TrendFilter::None),
-        ("cont_ema200_engulf_rr2_close", McMode::ContinuationEma200, SignalPattern::Engulfing, EntryMode::Close, rr_2, false, TrendFilter::Ema { fast: 50, slow: 200 }),
-        ("cont_ema200_engulf_rr2_prevopen", McMode::ContinuationEma200, SignalPattern::Engulfing, EntryMode::PrevOpen, rr_2, false, TrendFilter::Ema { fast: 50, slow: 200 }),
-        ("cont_struct_engulf_rr2_prevopen", McMode::ContinuationStructure, SignalPattern::Engulfing, EntryMode::PrevOpen, rr_2, false, TrendFilter::MarketStructure),
+        (
+            "rev_daily_rr2_close",
+            McMode::ReversalDaily,
+            SignalPattern::Mc,
+            EntryMode::Close,
+            rr_2,
+            true,
+            TrendFilter::None,
+        ),
+        (
+            "rev_daily_rr2_prevopen",
+            McMode::ReversalDaily,
+            SignalPattern::Mc,
+            EntryMode::PrevOpen,
+            rr_2,
+            true,
+            TrendFilter::None,
+        ),
+        (
+            "cont_ema200_rr2_prevopen",
+            McMode::ContinuationEma200,
+            SignalPattern::Mc,
+            EntryMode::PrevOpen,
+            rr_2,
+            false,
+            TrendFilter::Ema {
+                fast: 50,
+                slow: 200,
+            },
+        ),
+        (
+            "cont_ema200_rr1.5_prevopen",
+            McMode::ContinuationEma200,
+            SignalPattern::Mc,
+            EntryMode::PrevOpen,
+            rr_1_5,
+            false,
+            TrendFilter::Ema {
+                fast: 50,
+                slow: 200,
+            },
+        ),
+        (
+            "cont_struct_rr2_prevopen",
+            McMode::ContinuationStructure,
+            SignalPattern::Mc,
+            EntryMode::PrevOpen,
+            rr_2,
+            false,
+            TrendFilter::MarketStructure,
+        ),
+        (
+            "rev_daily_engulf_rr2_prevopen",
+            McMode::ReversalDaily,
+            SignalPattern::Engulfing,
+            EntryMode::PrevOpen,
+            rr_2,
+            true,
+            TrendFilter::None,
+        ),
+        (
+            "cont_ema200_engulf_rr2_close",
+            McMode::ContinuationEma200,
+            SignalPattern::Engulfing,
+            EntryMode::Close,
+            rr_2,
+            false,
+            TrendFilter::Ema {
+                fast: 50,
+                slow: 200,
+            },
+        ),
+        (
+            "cont_ema200_engulf_rr2_prevopen",
+            McMode::ContinuationEma200,
+            SignalPattern::Engulfing,
+            EntryMode::PrevOpen,
+            rr_2,
+            false,
+            TrendFilter::Ema {
+                fast: 50,
+                slow: 200,
+            },
+        ),
+        (
+            "cont_struct_engulf_rr2_prevopen",
+            McMode::ContinuationStructure,
+            SignalPattern::Engulfing,
+            EntryMode::PrevOpen,
+            rr_2,
+            false,
+            TrendFilter::MarketStructure,
+        ),
     ];
 
     let mut all_results: Vec<Stats> = Vec::new();
@@ -235,22 +312,42 @@ fn main() {
 
     // Run analysis for each timeframe
     for (tf_name, candlesticks) in &timeframes {
-        println!("╔═══════════════════════════════════════════════════════════════════════════════╗");
+        println!(
+            "╔═══════════════════════════════════════════════════════════════════════════════╗"
+        );
         println!("║  TIMEFRAME: {:^68} ║", tf_name);
-        println!("╚═══════════════════════════════════════════════════════════════════════════════╝\n");
+        println!(
+            "╚═══════════════════════════════════════════════════════════════════════════════╝\n"
+        );
 
-        println!("{:<35} {:>7} {:>10} {:>8} {:>12} {:>13} {:>12} {:>12}",
-            "strategy", "trades", "win_rate", "max_dd%", "profit_factor", "balance", "gain", "costs"
+        println!(
+            "{:<35} {:>7} {:>10} {:>8} {:>12} {:>13} {:>12} {:>12}",
+            "strategy",
+            "trades",
+            "win_rate",
+            "max_dd%",
+            "profit_factor",
+            "balance",
+            "gain",
+            "costs"
         );
         println!("{}", "-".repeat(100));
 
         for (label, mode, pattern, entry, rr, levels, trend) in &strategies {
-            let config = config_with(mode.clone(), pattern.clone(), entry.clone(), *rr, *levels, trend.clone());
+            let config = config_with(
+                mode.clone(),
+                pattern.clone(),
+                entry.clone(),
+                *rr,
+                *levels,
+                trend.clone(),
+            );
             let stats = run_case(label.to_string(), tf_name.to_string(), candlesticks, config);
 
             let gain_x = (stats.final_balance / Decimal::from(1000)).trunc_with_scale(2);
 
-            println!("{:<35} {:>7} {:>10} {:>8} {:>13} {:>12.2} {:>11}x {:>12.2}",
+            println!(
+                "{:<35} {:>7} {:>10} {:>8} {:>13} {:>12.2} {:>11}x {:>12.2}",
                 stats.label,
                 stats.trades,
                 stats.win_rate,
@@ -271,7 +368,8 @@ fn main() {
     println!("║                    BEST STRATEGY PER TIMEFRAME                               ║");
     println!("╚═══════════════════════════════════════════════════════════════════════════════╝\n");
 
-    println!("{:<10} {:<35} {:>12} {:>8} {:>7} {:>10}",
+    println!(
+        "{:<10} {:<35} {:>12} {:>8} {:>7} {:>10}",
         "timeframe", "strategy", "balance", "gain", "trades", "win_rate"
     );
     println!("{}", "=".repeat(95));
@@ -288,7 +386,8 @@ fn main() {
 
         if let Some(best_stats) = best {
             let gain_x = (best_stats.final_balance / Decimal::from(1000)).trunc_with_scale(2);
-            println!("{:<10} {:<35} {:>12.2} {:>7}x {:>7} {:>10}",
+            println!(
+                "{:<10} {:<35} {:>12.2} {:>7}x {:>7} {:>10}",
                 best_stats.timeframe,
                 best_stats.label,
                 best_stats.final_balance,
@@ -307,7 +406,8 @@ fn main() {
     let mut sorted_results = all_results.clone();
     sorted_results.sort_by(|a, b| b.final_balance.cmp(&a.final_balance));
 
-    println!("{:<6} {:<10} {:<35} {:>12} {:>8} {:>7} {:>10}",
+    println!(
+        "{:<6} {:<10} {:<35} {:>12} {:>8} {:>7} {:>10}",
         "rank", "timeframe", "strategy", "balance", "gain", "trades", "win_rate"
     );
     println!("{}", "=".repeat(105));
@@ -320,7 +420,8 @@ fn main() {
             2 => "🥉",
             _ => "  ",
         };
-        println!("{}{:<4} {:<10} {:<35} {:>12.2} {:>7}x {:>7} {:>10}",
+        println!(
+            "{}{:<4} {:<10} {:<35} {:>12.2} {:>7}x {:>7} {:>10}",
             medal,
             i + 1,
             stats.timeframe,
@@ -337,15 +438,19 @@ fn main() {
     println!("╚═══════════════════════════════════════════════════════════════════════════════╝\n");
 
     // Find best timeframe
-    let mut tf_totals: std::collections::HashMap<String, (Decimal, usize)> = std::collections::HashMap::new();
+    let mut tf_totals: std::collections::HashMap<String, (Decimal, usize)> =
+        std::collections::HashMap::new();
     for stats in &all_results {
-        let entry = tf_totals.entry(stats.timeframe.clone()).or_insert((Decimal::ZERO, 0));
+        let entry = tf_totals
+            .entry(stats.timeframe.clone())
+            .or_insert((Decimal::ZERO, 0));
         entry.0 += stats.final_balance;
         entry.1 += 1;
     }
 
     println!("Average Balance by Timeframe:");
-    let mut tf_avgs: Vec<_> = tf_totals.iter()
+    let mut tf_avgs: Vec<_> = tf_totals
+        .iter()
         .map(|(tf, (total, count))| (tf.clone(), total / Decimal::from(*count as i32)))
         .collect();
     tf_avgs.sort_by(|a, b| b.1.cmp(&a.1));

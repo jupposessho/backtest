@@ -23,12 +23,7 @@ impl BacktestResult {
             .len()
     }
     pub fn profit_in_r(&self) -> Decimal {
-        let r: Decimal = self
-            .trades
-            .clone()
-            .into_iter()
-            .map(|x| x.gross_r())
-            .sum();
+        let r: Decimal = self.trades.clone().into_iter().map(|x| x.gross_r()).sum();
         r.trunc_with_scale(2)
     }
 
@@ -47,14 +42,10 @@ impl BacktestResult {
 
     pub fn pnl(&self) -> Decimal {
         let r = Decimal::from_f32(0.01).unwrap();
-        let result = self
-            .trades
-            .clone()
-            .iter()
-            .fold(self.capital, |acc, &x| {
-                let gross_change = acc * r * x.gross_r().trunc_with_scale(4);
-                acc + gross_change - x.total_costs()
-            });
+        let result = self.trades.clone().iter().fold(self.capital, |acc, &x| {
+            let gross_change = acc * r * x.gross_r().trunc_with_scale(4);
+            acc + gross_change - x.total_costs()
+        });
         ((result - self.capital) / self.capital * Decimal::from(100)).trunc_with_scale(2)
     }
 }

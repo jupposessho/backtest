@@ -111,13 +111,7 @@ fn eval_asset(
 
                     rows.push(Row {
                         asset,
-                        name: format!(
-                            "close_ifvg_rr{}_poi{}_ob{}_{}",
-                            rr,
-                            poi,
-                            ob,
-                            label_kz(kz)
-                        ),
+                        name: format!("close_ifvg_rr{}_poi{}_ob{}_{}", rr, poi, ob, label_kz(kz)),
                         net_6m_usd: net_6m.round_dp(2),
                         positive_months: positive,
                         trades: result.trades.len(),
@@ -169,12 +163,7 @@ fn main() {
         for r in rows.iter().take(10) {
             println!(
                 "{},{:.2},{},{},{},{}",
-                r.name,
-                r.net_6m_usd,
-                r.positive_months,
-                r.trades,
-                r.wins,
-                r.losses
+                r.name, r.net_6m_usd, r.positive_months, r.trades, r.wins, r.losses
             );
         }
         println!();

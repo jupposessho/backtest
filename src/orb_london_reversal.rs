@@ -6,12 +6,15 @@ use rust_decimal::Decimal;
 use backtest::{
     candle_stick_loader::{CandleDataSource, CandleStickLoader},
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::orb_london_reversal::{OrbLondonReversal, OrbLondonReversalConfig},
 };
 
 fn load_parquet(path: &str) -> Vec<CandleStick> {
-    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path)).expect("failed loading parquet")
+    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
+        .expect("failed loading parquet")
 }
 
 fn print_stats(name: &str, result: &BacktestResult) {

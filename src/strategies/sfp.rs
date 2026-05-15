@@ -52,9 +52,9 @@ impl SetupDetector for SfpDetector {
 
         let mut out = Vec::new();
 
-        let sfp_high = swing_highs
-            .iter()
-            .any(|x| x.close_time < actual.close_time && x.high < actual.high && x.high > actual.close);
+        let sfp_high = swing_highs.iter().any(|x| {
+            x.close_time < actual.close_time && x.high < actual.high && x.high > actual.close
+        });
         if sfp_high {
             if let Some(prev_low) = swing_lows.last() {
                 let entry = actual.close;
@@ -69,14 +69,15 @@ impl SetupDetector for SfpDetector {
                         stop: StopModel::FixedPrice(sl),
                         target: TargetModel::FixedPrice(tp),
                         trailing: TrailingModel::None,
+                        max_hold_bars: None,
                     });
                 }
             }
         }
 
-        let sfp_low = swing_lows
-            .iter()
-            .any(|x| x.close_time < actual.close_time && x.low > actual.low && x.low < actual.close);
+        let sfp_low = swing_lows.iter().any(|x| {
+            x.close_time < actual.close_time && x.low > actual.low && x.low < actual.close
+        });
         if sfp_low {
             if let Some(prev_high) = swing_highs.last() {
                 let entry = actual.close;
@@ -91,6 +92,7 @@ impl SetupDetector for SfpDetector {
                         stop: StopModel::FixedPrice(sl),
                         target: TargetModel::FixedPrice(tp),
                         trailing: TrailingModel::None,
+                        max_hold_bars: None,
                     });
                 }
             }

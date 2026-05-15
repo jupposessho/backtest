@@ -29,7 +29,12 @@ pub struct IctComposed {
 }
 
 impl IctComposed {
-    fn to_entry_model(&self, direction: PositionDirection, signal: CandleStick, sweep: SweepSignal) -> EntryModel {
+    fn to_entry_model(
+        &self,
+        direction: PositionDirection,
+        signal: CandleStick,
+        sweep: SweepSignal,
+    ) -> EntryModel {
         match self.entry_choice {
             IctEntryChoice::ObPrevOpen => EntryModel::LimitByPolicy {
                 policy: EntryPolicy::ObPrevOpen,
@@ -46,13 +51,17 @@ impl IctComposed {
                 };
                 let (ote_low, ote_high) = match direction {
                     PositionDirection::Long => {
-                        let low = signal.close.0 - move_range * Decimal::from_str_exact("0.786").unwrap();
-                        let high = signal.close.0 - move_range * Decimal::from_str_exact("0.618").unwrap();
+                        let low =
+                            signal.close.0 - move_range * Decimal::from_str_exact("0.786").unwrap();
+                        let high =
+                            signal.close.0 - move_range * Decimal::from_str_exact("0.618").unwrap();
                         (DecimalVec(low), DecimalVec(high))
                     }
                     PositionDirection::Short => {
-                        let low = signal.close.0 + move_range * Decimal::from_str_exact("0.618").unwrap();
-                        let high = signal.close.0 + move_range * Decimal::from_str_exact("0.786").unwrap();
+                        let low =
+                            signal.close.0 + move_range * Decimal::from_str_exact("0.618").unwrap();
+                        let high =
+                            signal.close.0 + move_range * Decimal::from_str_exact("0.786").unwrap();
                         (DecimalVec(low), DecimalVec(high))
                     }
                 };
@@ -96,6 +105,7 @@ impl TradingModel for IctComposed {
                         stop: StopModel::FixedPrice(stop),
                         target: TargetModel::FixedR(self.rr_target),
                         trailing: TrailingModel::BreakEvenAtR(Decimal::ONE),
+                        max_hold_bars: None,
                     });
                     active_sweep = None;
                 } else if i > sweep.index + self.mss_confirm_window {

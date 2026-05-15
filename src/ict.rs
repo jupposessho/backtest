@@ -8,7 +8,9 @@ use backtest::{
     candle_stick_loader::{CandleDataSource, CandleStickLoader},
     engine::types::ExecutionConfig,
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::ict_composed::{IctComposed, IctEntryChoice},
 };
 
@@ -70,14 +72,25 @@ fn equity_metrics(
         }
     }
 
-    (capital.trunc_with_scale(2), max_dd, gross_profit, gross_loss)
+    (
+        capital.trunc_with_scale(2),
+        max_dd,
+        gross_profit,
+        gross_loss,
+    )
 }
 
 fn compute_stats(label: &'static str, result: &BacktestResult) -> Stats {
     let trades = &result.trades;
     let total = trades.len();
-    let winners = trades.iter().filter(|t| t.result == TradeResult::Winner).count();
-    let losers = trades.iter().filter(|t| t.result == TradeResult::Expense).count();
+    let winners = trades
+        .iter()
+        .filter(|t| t.result == TradeResult::Winner)
+        .count();
+    let losers = trades
+        .iter()
+        .filter(|t| t.result == TradeResult::Expense)
+        .count();
     let break_evens = trades
         .iter()
         .filter(|t| t.result == TradeResult::BreakEven)

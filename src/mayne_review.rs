@@ -23,7 +23,11 @@ struct ReviewRow {
     rr_pass: usize,
 }
 
-fn cap_pair(htf_data: &[CandleStick], ltf_data: &[CandleStick], htf_cap: usize) -> (Vec<CandleStick>, Vec<CandleStick>) {
+fn cap_pair(
+    htf_data: &[CandleStick],
+    ltf_data: &[CandleStick],
+    htf_cap: usize,
+) -> (Vec<CandleStick>, Vec<CandleStick>) {
     let htf_start = htf_data.len().saturating_sub(htf_cap);
     let htf = htf_data[htf_start..].to_vec();
     let min_time = htf.first().map(|c| c.open_time).unwrap_or(0);
@@ -156,7 +160,11 @@ fn run_asset(name: &str, pair: &str, htf_data: Vec<CandleStick>, ltf_data: Vec<C
     let (htf_data, ltf_data) = cap_pair(&htf_data, &ltf_data, 3000);
     if htf_data.is_empty() || ltf_data.is_empty() {
         println!("\n=== {} | {} ===", name, pair);
-        println!("skipped: empty htf/ltf after alignment (htf={}, ltf={})", htf_data.len(), ltf_data.len());
+        println!(
+            "skipped: empty htf/ltf after alignment (htf={}, ltf={})",
+            htf_data.len(),
+            ltf_data.len()
+        );
         return;
     }
     let patterns = [
@@ -182,7 +190,11 @@ fn run_asset(name: &str, pair: &str, htf_data: Vec<CandleStick>, ltf_data: Vec<C
     let ifvg_max_confirm_bars = [6usize, 12usize, 24usize, 48usize, 96usize];
 
     println!("\n=== {} | {} ===", name, pair);
-    println!("using capped dataset: htf={}, ltf={}", htf_data.len(), ltf_data.len());
+    println!(
+        "using capped dataset: htf={}, ltf={}",
+        htf_data.len(),
+        ltf_data.len()
+    );
     let mut rows: Vec<ReviewRow> = Vec::new();
 
     for pattern in patterns {

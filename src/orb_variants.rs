@@ -3,11 +3,11 @@ extern crate rust_decimal;
 use std::collections::HashMap;
 
 use backtest::candle_stick_loader::{CandleDataSource, CandleStickLoader};
+use backtest::engine::types::ExecutionConfig;
 use backtest::model::candle_stick::CandleStick;
 use backtest::model::decimal::DecimalVec;
 use backtest::model::trade_result::TradeResult;
 use backtest::model::trading_model::TradingModel;
-use backtest::engine::types::ExecutionConfig;
 use backtest::strategies::orb::{Orb, OrbConfig, OrbDuration, OrbEntryModel, OrbSlType};
 use rust_decimal::Decimal;
 
@@ -45,8 +45,8 @@ fn load_parquet(path: &str) -> Vec<CandleStick> {
 }
 
 fn load_json(path: &str) -> Vec<CandleStick> {
-    let raw = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("failed loading {}: {}", path, e));
+    let raw =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("failed loading {}: {}", path, e));
     CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(&raw))
         .unwrap_or_else(|e| panic!("failed parsing {}: {}", path, e))
 }
@@ -85,7 +85,12 @@ fn resample_minutes(data: &[CandleStick], minutes: i64) -> Vec<CandleStick> {
     out
 }
 
-fn summarize(label: &str, asset: &str, tf: &str, result: backtest::model::backtest_result::BacktestResult) -> Row {
+fn summarize(
+    label: &str,
+    asset: &str,
+    tf: &str,
+    result: backtest::model::backtest_result::BacktestResult,
+) -> Row {
     let winners = result.result(TradeResult::Winner);
     let losers = result.result(TradeResult::Expense);
     let trades = result.number_of_trades();
@@ -214,7 +219,12 @@ fn main() {
     // Expanded grid inspired by ~/develop/play/orb prototypes
     let durations = [OrbDuration::Minutes15, OrbDuration::Minutes30];
     let duration_labels = ["15", "30"];
-    let rr_vals = [Decimal::new(15, 1), Decimal::from(2), Decimal::new(25, 1), Decimal::from(3)];
+    let rr_vals = [
+        Decimal::new(15, 1),
+        Decimal::from(2),
+        Decimal::new(25, 1),
+        Decimal::from(3),
+    ];
     let sl_types = [
         OrbSlType::OppositeRange,
         OrbSlType::RangePct(Decimal::from(25)),
@@ -236,11 +246,7 @@ fn main() {
                             if !rm {
                                 let name = format!(
                                     "grid_or{}_rr{}_{}_aw{}_{}",
-                                    duration_labels[di],
-                                    rr,
-                                    sl_labels[si],
-                                    aw,
-                                    hold_labels[hi]
+                                    duration_labels[di], rr, sl_labels[si], aw, hold_labels[hi]
                                 )
                                 .replace('.', "p");
                                 variants.push((
@@ -352,8 +358,7 @@ fn main() {
     md.push_str("## Stability-Filtered Top Realistic Variants\n\n");
     md.push_str(&format!(
         "Filter: trades >= {} and pf_r >= {}.\n\n",
-        min_trades,
-        min_pf
+        min_trades, min_pf
     ));
     for asset in assets {
         let mut stable_rows: Vec<&Row> = rows
@@ -380,7 +385,9 @@ fn main() {
     }
 
     md.push_str("## Full Grid\n\n");
-    md.push_str("| variant | asset | timeframe | trades | win_rate_% | profit_r | pf_r | pnl_% |\n");
+    md.push_str(
+        "| variant | asset | timeframe | trades | win_rate_% | profit_r | pf_r | pnl_% |\n",
+    );
     md.push_str("|---|---|---|---:|---:|---:|---:|---:|\n");
     for r in &rows {
         md.push_str(&format!(
@@ -466,11 +473,8 @@ fn main() {
         ));
     }
 
-    std::fs::write(
-        "reports/strategy_overviews/ORB_VARIANTS_GRID.md",
-        md,
-    )
-    .unwrap_or_else(|e| panic!("failed writing report: {}", e));
+    std::fs::write("reports/strategy_overviews/ORB_VARIANTS_GRID.md", md)
+        .unwrap_or_else(|e| panic!("failed writing report: {}", e));
 
     println!("Wrote reports/strategy_overviews/ORB_VARIANTS_GRID.md");
 }

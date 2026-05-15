@@ -85,7 +85,10 @@ impl TradingModel for OrbLondonReversal {
                 bars_in_position = 0;
             }
 
-            if self.config.eod_close && london_time >= self.config.session_end && active_position.is_some() {
+            if self.config.eod_close
+                && london_time >= self.config.session_end
+                && active_position.is_some()
+            {
                 let mut pos = active_position.take().unwrap();
                 let exit_price = candle.open.0;
                 let result = match pos.direction {
@@ -118,7 +121,11 @@ impl TradingModel for OrbLondonReversal {
                 });
             }
 
-            if !range_ready && london_time >= self.config.orb_end && orb_high.is_some() && orb_low.is_some() {
+            if !range_ready
+                && london_time >= self.config.orb_end
+                && orb_high.is_some()
+                && orb_low.is_some()
+            {
                 range_ready = true;
             }
 
@@ -150,15 +157,27 @@ impl TradingModel for OrbLondonReversal {
                 let closed = match pos.direction {
                     PositionDirection::Long => {
                         if candle.high.0 >= pos.tp.0 {
-                            trades.push(Trade::from_position(pos, candle.close_time, TradeResult::Winner));
+                            trades.push(Trade::from_position(
+                                pos,
+                                candle.close_time,
+                                TradeResult::Winner,
+                            ));
                             true
                         } else if pos.at_break_even && candle.low.0 <= pos.entry.0 {
                             let mut be_pos = pos;
                             be_pos.tp = be_pos.entry;
-                            trades.push(Trade::from_position(be_pos, candle.close_time, TradeResult::BreakEven));
+                            trades.push(Trade::from_position(
+                                be_pos,
+                                candle.close_time,
+                                TradeResult::BreakEven,
+                            ));
                             true
                         } else if candle.low.0 <= pos.sl.0 {
-                            trades.push(Trade::from_position(pos, candle.close_time, TradeResult::Expense));
+                            trades.push(Trade::from_position(
+                                pos,
+                                candle.close_time,
+                                TradeResult::Expense,
+                            ));
                             true
                         } else {
                             false
@@ -166,15 +185,27 @@ impl TradingModel for OrbLondonReversal {
                     }
                     PositionDirection::Short => {
                         if candle.low.0 <= pos.tp.0 {
-                            trades.push(Trade::from_position(pos, candle.close_time, TradeResult::Winner));
+                            trades.push(Trade::from_position(
+                                pos,
+                                candle.close_time,
+                                TradeResult::Winner,
+                            ));
                             true
                         } else if pos.at_break_even && candle.high.0 >= pos.entry.0 {
                             let mut be_pos = pos;
                             be_pos.tp = be_pos.entry;
-                            trades.push(Trade::from_position(be_pos, candle.close_time, TradeResult::BreakEven));
+                            trades.push(Trade::from_position(
+                                be_pos,
+                                candle.close_time,
+                                TradeResult::BreakEven,
+                            ));
                             true
                         } else if candle.high.0 >= pos.sl.0 {
-                            trades.push(Trade::from_position(pos, candle.close_time, TradeResult::Expense));
+                            trades.push(Trade::from_position(
+                                pos,
+                                candle.close_time,
+                                TradeResult::Expense,
+                            ));
                             true
                         } else {
                             false
@@ -265,7 +296,8 @@ impl TradingModel for OrbLondonReversal {
                     );
 
                     if candle.close.0 <= hi && candle.close.0 >= lo {
-                        let excursion_pct = ((first_break_extreme.unwrap_or(candle.high.0) - hi) / range)
+                        let excursion_pct = ((first_break_extreme.unwrap_or(candle.high.0) - hi)
+                            / range)
                             * Decimal::from(100);
                         if excursion_pct < self.config.min_first_break_excursion_pct_of_orb {
                             traded_today = true;
@@ -299,7 +331,8 @@ impl TradingModel for OrbLondonReversal {
                     );
 
                     if candle.close.0 >= lo && candle.close.0 <= hi {
-                        let excursion_pct = ((lo - first_break_extreme.unwrap_or(candle.low.0)) / range)
+                        let excursion_pct = ((lo - first_break_extreme.unwrap_or(candle.low.0))
+                            / range)
                             * Decimal::from(100);
                         if excursion_pct < self.config.min_first_break_excursion_pct_of_orb {
                             traded_today = true;
@@ -348,7 +381,17 @@ mod tests {
             .timestamp()
     }
 
-    fn candle(y: i32, m: u32, d: u32, hh: u32, mm: u32, o: Decimal, h: Decimal, l: Decimal, c: Decimal) -> CandleStick {
+    fn candle(
+        y: i32,
+        m: u32,
+        d: u32,
+        hh: u32,
+        mm: u32,
+        o: Decimal,
+        h: Decimal,
+        l: Decimal,
+        c: Decimal,
+    ) -> CandleStick {
         CandleStick {
             open_time: ts(y, m, d, hh, mm),
             close_time: ts(y, m, d, hh, mm + 1),
@@ -362,12 +405,72 @@ mod tests {
     #[test]
     fn enters_short_after_high_break_reentry_and_hits_orb_low() {
         let data = vec![
-            candle(2026, 1, 5, 8, 0, Decimal::from(100), Decimal::from(103), Decimal::from(99), Decimal::from(102)),
-            candle(2026, 1, 5, 8, 5, Decimal::from(102), Decimal::from(105), Decimal::from(101), Decimal::from(104)),
-            candle(2026, 1, 5, 8, 10, Decimal::from(104), Decimal::from(106), Decimal::from(102), Decimal::from(105)),
-            candle(2026, 1, 5, 8, 15, Decimal::from(105), Decimal::from(108), Decimal::from(104), Decimal::from(107)),
-            candle(2026, 1, 5, 8, 20, Decimal::from(107), Decimal::from(108), Decimal::from(104), Decimal::from(105)),
-            candle(2026, 1, 5, 8, 25, Decimal::from(105), Decimal::from(106), Decimal::from(99), Decimal::from(100)),
+            candle(
+                2026,
+                1,
+                5,
+                8,
+                0,
+                Decimal::from(100),
+                Decimal::from(103),
+                Decimal::from(99),
+                Decimal::from(102),
+            ),
+            candle(
+                2026,
+                1,
+                5,
+                8,
+                5,
+                Decimal::from(102),
+                Decimal::from(105),
+                Decimal::from(101),
+                Decimal::from(104),
+            ),
+            candle(
+                2026,
+                1,
+                5,
+                8,
+                10,
+                Decimal::from(104),
+                Decimal::from(106),
+                Decimal::from(102),
+                Decimal::from(105),
+            ),
+            candle(
+                2026,
+                1,
+                5,
+                8,
+                15,
+                Decimal::from(105),
+                Decimal::from(108),
+                Decimal::from(104),
+                Decimal::from(107),
+            ),
+            candle(
+                2026,
+                1,
+                5,
+                8,
+                20,
+                Decimal::from(107),
+                Decimal::from(108),
+                Decimal::from(104),
+                Decimal::from(105),
+            ),
+            candle(
+                2026,
+                1,
+                5,
+                8,
+                25,
+                Decimal::from(105),
+                Decimal::from(106),
+                Decimal::from(99),
+                Decimal::from(100),
+            ),
         ];
 
         let strategy = OrbLondonReversal {
@@ -384,12 +487,72 @@ mod tests {
     #[test]
     fn enters_long_after_low_break_reentry_and_stops_out() {
         let data = vec![
-            candle(2026, 1, 6, 8, 0, Decimal::from(200), Decimal::from(204), Decimal::from(199), Decimal::from(203)),
-            candle(2026, 1, 6, 8, 5, Decimal::from(203), Decimal::from(205), Decimal::from(201), Decimal::from(204)),
-            candle(2026, 1, 6, 8, 10, Decimal::from(204), Decimal::from(206), Decimal::from(202), Decimal::from(205)),
-            candle(2026, 1, 6, 8, 15, Decimal::from(205), Decimal::from(206), Decimal::from(198), Decimal::from(198)),
-            candle(2026, 1, 6, 8, 20, Decimal::from(198), Decimal::from(202), Decimal::from(197), Decimal::from(200)),
-            candle(2026, 1, 6, 8, 25, Decimal::from(200), Decimal::from(201), Decimal::from(196), Decimal::from(197)),
+            candle(
+                2026,
+                1,
+                6,
+                8,
+                0,
+                Decimal::from(200),
+                Decimal::from(204),
+                Decimal::from(199),
+                Decimal::from(203),
+            ),
+            candle(
+                2026,
+                1,
+                6,
+                8,
+                5,
+                Decimal::from(203),
+                Decimal::from(205),
+                Decimal::from(201),
+                Decimal::from(204),
+            ),
+            candle(
+                2026,
+                1,
+                6,
+                8,
+                10,
+                Decimal::from(204),
+                Decimal::from(206),
+                Decimal::from(202),
+                Decimal::from(205),
+            ),
+            candle(
+                2026,
+                1,
+                6,
+                8,
+                15,
+                Decimal::from(205),
+                Decimal::from(206),
+                Decimal::from(198),
+                Decimal::from(198),
+            ),
+            candle(
+                2026,
+                1,
+                6,
+                8,
+                20,
+                Decimal::from(198),
+                Decimal::from(202),
+                Decimal::from(197),
+                Decimal::from(200),
+            ),
+            candle(
+                2026,
+                1,
+                6,
+                8,
+                25,
+                Decimal::from(200),
+                Decimal::from(201),
+                Decimal::from(196),
+                Decimal::from(197),
+            ),
         ];
 
         let strategy = OrbLondonReversal {

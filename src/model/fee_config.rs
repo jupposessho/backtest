@@ -1,5 +1,5 @@
-use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::Decimal;
 
 /// Configuration for trading fees/commissions
 #[derive(Debug, Clone, Copy)]

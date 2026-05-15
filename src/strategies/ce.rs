@@ -142,9 +142,17 @@ impl CeStrategy {
             return None;
         }
         if lo_idx < hi_idx {
-            Some(Swing { side: CeSide::Long, swing_low: lo, swing_high: hi })
+            Some(Swing {
+                side: CeSide::Long,
+                swing_low: lo,
+                swing_high: hi,
+            })
         } else if hi_idx < lo_idx {
-            Some(Swing { side: CeSide::Short, swing_low: lo, swing_high: hi })
+            Some(Swing {
+                side: CeSide::Short,
+                swing_low: lo,
+                swing_high: hi,
+            })
         } else {
             None
         }
@@ -207,12 +215,20 @@ impl TradingModel for CeStrategy {
             while i < self.data_5m.len() {
                 let d = to_new_york_time(self.data_5m[i].open_time).date_naive();
                 let start = i;
-                while i < self.data_5m.len() && to_new_york_time(self.data_5m[i].open_time).date_naive() == d {
+                while i < self.data_5m.len()
+                    && to_new_york_time(self.data_5m[i].open_time).date_naive() == d
+                {
                     i += 1;
                 }
                 let open = self.data_5m[start].open.0;
                 let close = self.data_5m[i - 1].close.0;
-                let b = if close > open { 1 } else if close < open { -1 } else { 0 };
+                let b = if close > open {
+                    1
+                } else if close < open {
+                    -1
+                } else {
+                    0
+                };
                 day_bias.push((d, b));
             }
         }
@@ -220,7 +236,9 @@ impl TradingModel for CeStrategy {
         while i < self.data_5m.len() {
             let day = to_new_york_time(self.data_5m[i].open_time).date_naive();
             let start = i;
-            while i < self.data_5m.len() && to_new_york_time(self.data_5m[i].open_time).date_naive() == day {
+            while i < self.data_5m.len()
+                && to_new_york_time(self.data_5m[i].open_time).date_naive() == day
+            {
                 i += 1;
             }
             let day_slice = &self.data_5m[start..i];
@@ -257,7 +275,9 @@ impl TradingModel for CeStrategy {
                         lo = lo.min(c.low.0);
                     }
                     let range = hi - lo;
-                    if range < self.config.min_session_range || range > self.config.max_session_range {
+                    if range < self.config.min_session_range
+                        || range > self.config.max_session_range
+                    {
                         continue;
                     }
                 }
@@ -268,14 +288,17 @@ impl TradingModel for CeStrategy {
                     } else {
                         let mut bull = 0usize;
                         let mut bear = 0usize;
-                        for (_, b) in &day_bias[day_index - self.config.trend_lookback_days..day_index] {
+                        for (_, b) in
+                            &day_bias[day_index - self.config.trend_lookback_days..day_index]
+                        {
                             if *b > 0 {
                                 bull += 1;
                             } else if *b < 0 {
                                 bear += 1;
                             }
                         }
-                        let look = Decimal::from_i32(self.config.trend_lookback_days as i32).unwrap();
+                        let look =
+                            Decimal::from_i32(self.config.trend_lookback_days as i32).unwrap();
                         let bp = Decimal::from_i32(bull as i32).unwrap() / look;
                         let sp = Decimal::from_i32(bear as i32).unwrap() / look;
                         match swing.side {
@@ -297,7 +320,8 @@ impl TradingModel for CeStrategy {
                     true
                 };
                 let rr = self.dynamic_rr(trend_aligned, kz);
-                let ce = swing.swing_low + (swing.swing_high - swing.swing_low) * self.config.entry_at;
+                let ce =
+                    swing.swing_low + (swing.swing_high - swing.swing_low) * self.config.entry_at;
 
                 let mut entered = None;
                 for j in idx..(idx + self.config.max_wait_bars).min(day_slice.len()) {
@@ -367,24 +391,40 @@ impl TradingModel for CeStrategy {
                     match direction {
                         PositionDirection::Long => {
                             if c.low.0 <= sl {
-                                trades.push(self.make_trade(pos, c.close_time, TradeResult::Expense));
+                                trades.push(self.make_trade(
+                                    pos,
+                                    c.close_time,
+                                    TradeResult::Expense,
+                                ));
                                 closed = true;
                                 break;
                             }
                             if c.high.0 >= tp {
-                                trades.push(self.make_trade(pos, c.close_time, TradeResult::Winner));
+                                trades.push(self.make_trade(
+                                    pos,
+                                    c.close_time,
+                                    TradeResult::Winner,
+                                ));
                                 closed = true;
                                 break;
                             }
                         }
                         PositionDirection::Short => {
                             if c.high.0 >= sl {
-                                trades.push(self.make_trade(pos, c.close_time, TradeResult::Expense));
+                                trades.push(self.make_trade(
+                                    pos,
+                                    c.close_time,
+                                    TradeResult::Expense,
+                                ));
                                 closed = true;
                                 break;
                             }
                             if c.low.0 <= tp {
-                                trades.push(self.make_trade(pos, c.close_time, TradeResult::Winner));
+                                trades.push(self.make_trade(
+                                    pos,
+                                    c.close_time,
+                                    TradeResult::Winner,
+                                ));
                                 closed = true;
                                 break;
                             }
@@ -416,7 +456,10 @@ impl TradingModel for CeStrategy {
                 traded = true;
             }
         }
-        BacktestResult { trades, capital: Decimal::from_i32(1000).unwrap() }
+        BacktestResult {
+            trades,
+            capital: Decimal::from_i32(1000).unwrap(),
+        }
     }
 }
 
@@ -469,7 +512,11 @@ pub fn score(result: &BacktestResult) -> (Decimal, Decimal, Decimal, usize) {
         }
         cap += ch;
     }
-    let pf = if gl > Decimal::ZERO { gp / gl } else { Decimal::ZERO };
+    let pf = if gl > Decimal::ZERO {
+        gp / gl
+    } else {
+        Decimal::ZERO
+    };
     let net_usd = cap - Decimal::from(1000);
     (net_usd, pf, win, n)
 }

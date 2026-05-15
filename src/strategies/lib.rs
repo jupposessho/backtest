@@ -3,12 +3,12 @@ use chrono_tz::Tz;
 use itertools::Itertools;
 use rust_decimal::Decimal;
 
+use crate::engine::types::{apply_entry_slippage, apply_exit_slippage, ExecutionConfig};
 use crate::model::{
     candle_stick::CandleStick, decimal::DecimalVec, position::Position,
     position_direction::PositionDirection, session::Session, trade::Trade,
     trade_result::TradeResult, trigger_type::TriggerType,
 };
-use crate::engine::types::{apply_entry_slippage, apply_exit_slippage, ExecutionConfig};
 
 pub fn is_swing_low(actual: CandleStick, previous: CandleStick, next: CandleStick) -> bool {
     actual.low < previous.low && actual.low < next.low
@@ -157,7 +157,11 @@ pub fn trigger_mayne(
 }
 // pub fn look_for_entry(candles: Vec<CandleStick>) {}
 
-pub fn run_trade(position: Position, candles: Vec<&CandleStick>, execution: &ExecutionConfig) -> Option<Trade> {
+pub fn run_trade(
+    position: Position,
+    candles: Vec<&CandleStick>,
+    execution: &ExecutionConfig,
+) -> Option<Trade> {
     for actual in candles {
         match position.direction {
             PositionDirection::Short => {

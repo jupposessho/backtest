@@ -227,7 +227,10 @@ fn validate_data(data: &[Bar], expected_spacing_sec: i64) {
         assert!(b.low <= b.open && b.low <= b.close, "OHLC invalid at {i}");
         if i > 0 {
             let prev = data[i - 1];
-            assert!(b.open_time > prev.open_time, "timestamp not monotonic at {i}");
+            assert!(
+                b.open_time > prev.open_time,
+                "timestamp not monotonic at {i}"
+            );
             let delta = b.open_time - prev.open_time;
             assert!(
                 delta % expected_spacing_sec == 0,
@@ -239,7 +242,8 @@ fn validate_data(data: &[Bar], expected_spacing_sec: i64) {
 
 fn build_day_levels(data: &[Bar]) -> BTreeMap<String, Vec<LevelRef>> {
     let sessions = [ASIA, LONDON, NY_AM, NY_PM];
-    let mut per_day_and_session: BTreeMap<String, BTreeMap<&'static str, LevelRef>> = BTreeMap::new();
+    let mut per_day_and_session: BTreeMap<String, BTreeMap<&'static str, LevelRef>> =
+        BTreeMap::new();
 
     for s in sessions {
         let mut i = 0usize;
@@ -442,7 +446,7 @@ fn make_setup(
             if !vol_ok {
                 continue;
             }
-            
+
             let stop = b.high + TICK_SIZE * Decimal::from(STOP_BUFFER_TICKS);
             f.setup_built += 1;
             return Some(Setup {
@@ -631,13 +635,9 @@ fn run(
         }
 
         if let Some(setup) = make_setup(i, data, levels, min_sweep_ticks, vol_mult, f) {
-            if let Some(tr) = simulate_trade(
-                data,
-                setup,
-                slippage_ticks_per_side,
-                min_target_ticks,
-                f,
-            ) {
+            if let Some(tr) =
+                simulate_trade(data, setup, slippage_ticks_per_side, min_target_ticks, f)
+            {
                 let session = entry_session_name(data[i].open_time).unwrap_or("NONE");
                 let allowed = match (session, setup.dir) {
                     ("LONDON", Dir::Long) => !traded_london_long,
@@ -745,7 +745,11 @@ fn run_suite(
             min_sweep_ticks,
             vol_mult,
             min_target_ticks,
-            if label.contains("1m") { COOLDOWN_BARS_1M } else { COOLDOWN_BARS_3M },
+            if label.contains("1m") {
+                COOLDOWN_BARS_1M
+            } else {
+                COOLDOWN_BARS_3M
+            },
             &mut f,
         );
         print_row(&format!("slip{}", slip), summarize(&trades));
@@ -775,7 +779,11 @@ fn run_suite(
         min_sweep_ticks,
         vol_mult,
         min_target_ticks,
-        if label.contains("1m") { COOLDOWN_BARS_1M } else { COOLDOWN_BARS_3M },
+        if label.contains("1m") {
+            COOLDOWN_BARS_1M
+        } else {
+            COOLDOWN_BARS_3M
+        },
         &mut f_a,
     ));
     let b_st = summarize(&run(
@@ -784,7 +792,11 @@ fn run_suite(
         min_sweep_ticks,
         vol_mult,
         min_target_ticks,
-        if label.contains("1m") { COOLDOWN_BARS_1M } else { COOLDOWN_BARS_3M },
+        if label.contains("1m") {
+            COOLDOWN_BARS_1M
+        } else {
+            COOLDOWN_BARS_3M
+        },
         &mut f_b,
     ));
     println!(

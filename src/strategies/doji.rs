@@ -103,13 +103,21 @@ impl DojiDetector {
             DojiType::LongLegged => {
                 upper_wick_pct >= Decimal::from(30) && lower_wick_pct >= Decimal::from(30)
             }
-            DojiType::Dragonfly => upper_wick_pct < Decimal::from(5) && lower_wick_pct >= Decimal::from(30),
-            DojiType::Gravestone => lower_wick_pct < Decimal::from(5) && upper_wick_pct >= Decimal::from(30),
+            DojiType::Dragonfly => {
+                upper_wick_pct < Decimal::from(5) && lower_wick_pct >= Decimal::from(30)
+            }
+            DojiType::Gravestone => {
+                lower_wick_pct < Decimal::from(5) && upper_wick_pct >= Decimal::from(30)
+            }
             _ => true,
         }
     }
 
-    fn detect_direction(&self, lower_wick_pct: Decimal, upper_wick_pct: Decimal) -> PositionDirection {
+    fn detect_direction(
+        &self,
+        lower_wick_pct: Decimal,
+        upper_wick_pct: Decimal,
+    ) -> PositionDirection {
         match self.config.doji_type {
             DojiType::Dragonfly => return PositionDirection::Long,
             DojiType::Gravestone => return PositionDirection::Short,
@@ -130,7 +138,12 @@ impl DojiDetector {
 }
 
 impl SetupDetector for DojiDetector {
-    fn detect(&self, ind: usize, data: &[CandleStick], _ctx: &MarketContext) -> Vec<SetupCandidate> {
+    fn detect(
+        &self,
+        ind: usize,
+        data: &[CandleStick],
+        _ctx: &MarketContext,
+    ) -> Vec<SetupCandidate> {
         let c = data[ind];
         let ny = to_new_york_time(c.open_time);
         let t = ny.time();
@@ -265,6 +278,7 @@ impl SetupDetector for DojiDetector {
             stop: StopModel::FixedPrice(sl),
             target,
             trailing,
+            max_hold_bars: None,
         }]
     }
 }

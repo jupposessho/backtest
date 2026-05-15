@@ -10,9 +10,7 @@ use crate::model::trading_model::TradingModel;
 use crate::model::trigger_type::TriggerType;
 use crate::strategies::lib::{first_swing, is_swing_low};
 
-use super::lib::{
-    add_to_swings, find_sfp_high, find_sfp_low, is_swing_high, trigger_mayne,
-};
+use super::lib::{add_to_swings, find_sfp_high, find_sfp_low, is_swing_high, trigger_mayne};
 
 #[derive(Clone, Copy, Debug)]
 pub enum ReversalPattern {
@@ -186,9 +184,9 @@ impl Mayne {
     }
 
     fn ltf_index_for_sfp_candle(&self, sfp_candle: CandleStick) -> Option<usize> {
-        self.ltf_data
-            .iter()
-            .position(|x| x.open_time == sfp_candle.open_time && x.close_time == sfp_candle.close_time)
+        self.ltf_data.iter().position(|x| {
+            x.open_time == sfp_candle.open_time && x.close_time == sfp_candle.close_time
+        })
     }
 
     fn find_ltf_anchor_for_htf(
@@ -340,53 +338,56 @@ impl Mayne {
                         if let Some(ltf_sfp_candle) =
                             self.find_ltf_anchor_for_htf(actual, PositionDirection::Short)
                         {
-                        if let Some(ltf_sfp_index) = self.ltf_index_for_sfp_candle(ltf_sfp_candle) {
-                            if self.reversal_gate(
-                                ind,
-                                PositionDirection::Short,
-                                ltf_sfp_index,
-                                &mut diagnostics,
-                            ) {
-                                let (mut previous_candles, next_candles): (Vec<_>, Vec<_>) = self
-                                    .ltf_data
-                                    .clone()
-                                    .into_iter()
-                                    .partition(|x| x.open_time < ltf_sfp_candle.open_time);
-                                previous_candles.reverse();
-                                if let Some(prev_ltf_swing_low) =
-                                    first_swing(previous_candles.clone(), is_swing_low)
-                                {
-                                    let sl = match self.sl_variant {
-                                        SlVariant::SfpExtreme => actual.high,
-                                        SlVariant::LtfRecentSwing => {
-                                            first_swing(previous_candles.clone(), is_swing_high)
-                                                .map(|c| c.high)
-                                                .unwrap_or(actual.high)
+                            if let Some(ltf_sfp_index) =
+                                self.ltf_index_for_sfp_candle(ltf_sfp_candle)
+                            {
+                                if self.reversal_gate(
+                                    ind,
+                                    PositionDirection::Short,
+                                    ltf_sfp_index,
+                                    &mut diagnostics,
+                                ) {
+                                    let (mut previous_candles, next_candles): (Vec<_>, Vec<_>) =
+                                        self.ltf_data
+                                            .clone()
+                                            .into_iter()
+                                            .partition(|x| x.open_time < ltf_sfp_candle.open_time);
+                                    previous_candles.reverse();
+                                    if let Some(prev_ltf_swing_low) =
+                                        first_swing(previous_candles.clone(), is_swing_low)
+                                    {
+                                        let sl = match self.sl_variant {
+                                            SlVariant::SfpExtreme => actual.high,
+                                            SlVariant::LtfRecentSwing => {
+                                                first_swing(previous_candles.clone(), is_swing_high)
+                                                    .map(|c| c.high)
+                                                    .unwrap_or(actual.high)
+                                            }
+                                        };
+                                        let tp = match self.tp_variant {
+                                            TpVariant::OpposingHtfSwing => prev_swing_low.low,
+                                            TpVariant::OpposingLtfSwing => prev_ltf_swing_low.low,
+                                        };
+                                        let before = trades.len();
+                                        trigger_mayne(
+                                            PositionDirection::Short,
+                                            self.trigger_type,
+                                            prev_ltf_swing_low.low,
+                                            sl,
+                                            tp,
+                                            self.rr_threshold,
+                                            next_candles,
+                                            &mut trades,
+                                            &self.execution,
+                                        );
+                                        if trades.len() > before {
+                                            diagnostics.ltf_trigger_hit += 1;
+                                            diagnostics.rr_pass += 1;
                                         }
-                                    };
-                                    let tp = match self.tp_variant {
-                                        TpVariant::OpposingHtfSwing => prev_swing_low.low,
-                                        TpVariant::OpposingLtfSwing => prev_ltf_swing_low.low,
-                                    };
-                                    let before = trades.len();
-                                    trigger_mayne(
-                                        PositionDirection::Short,
-                                        self.trigger_type,
-                                        prev_ltf_swing_low.low,
-                                        sl,
-                                        tp,
-                                        self.rr_threshold,
-                                        next_candles,
-                                        &mut trades,
-                                        &self.execution,
-                                    );
-                                    if trades.len() > before {
-                                        diagnostics.ltf_trigger_hit += 1;
-                                        diagnostics.rr_pass += 1;
                                     }
                                 }
                             }
-                        }}
+                        }
                     }
                 }
 
@@ -396,53 +397,56 @@ impl Mayne {
                         if let Some(ltf_sfp_candle) =
                             self.find_ltf_anchor_for_htf(actual, PositionDirection::Long)
                         {
-                        if let Some(ltf_sfp_index) = self.ltf_index_for_sfp_candle(ltf_sfp_candle) {
-                            if self.reversal_gate(
-                                ind,
-                                PositionDirection::Long,
-                                ltf_sfp_index,
-                                &mut diagnostics,
-                            ) {
-                                let (mut previous_candles, next_candles): (Vec<_>, Vec<_>) = self
-                                    .ltf_data
-                                    .clone()
-                                    .into_iter()
-                                    .partition(|x| x.open_time < ltf_sfp_candle.open_time);
-                                previous_candles.reverse();
-                                if let Some(prev_ltf_swing_high) =
-                                    first_swing(previous_candles.clone(), is_swing_high)
-                                {
-                                    let sl = match self.sl_variant {
-                                        SlVariant::SfpExtreme => actual.low,
-                                        SlVariant::LtfRecentSwing => {
-                                            first_swing(previous_candles.clone(), is_swing_low)
-                                                .map(|c| c.low)
-                                                .unwrap_or(actual.low)
+                            if let Some(ltf_sfp_index) =
+                                self.ltf_index_for_sfp_candle(ltf_sfp_candle)
+                            {
+                                if self.reversal_gate(
+                                    ind,
+                                    PositionDirection::Long,
+                                    ltf_sfp_index,
+                                    &mut diagnostics,
+                                ) {
+                                    let (mut previous_candles, next_candles): (Vec<_>, Vec<_>) =
+                                        self.ltf_data
+                                            .clone()
+                                            .into_iter()
+                                            .partition(|x| x.open_time < ltf_sfp_candle.open_time);
+                                    previous_candles.reverse();
+                                    if let Some(prev_ltf_swing_high) =
+                                        first_swing(previous_candles.clone(), is_swing_high)
+                                    {
+                                        let sl = match self.sl_variant {
+                                            SlVariant::SfpExtreme => actual.low,
+                                            SlVariant::LtfRecentSwing => {
+                                                first_swing(previous_candles.clone(), is_swing_low)
+                                                    .map(|c| c.low)
+                                                    .unwrap_or(actual.low)
+                                            }
+                                        };
+                                        let tp = match self.tp_variant {
+                                            TpVariant::OpposingHtfSwing => prev_swing_high.high,
+                                            TpVariant::OpposingLtfSwing => prev_ltf_swing_high.high,
+                                        };
+                                        let before = trades.len();
+                                        trigger_mayne(
+                                            PositionDirection::Long,
+                                            self.trigger_type,
+                                            prev_ltf_swing_high.high,
+                                            sl,
+                                            tp,
+                                            self.rr_threshold,
+                                            next_candles,
+                                            &mut trades,
+                                            &self.execution,
+                                        );
+                                        if trades.len() > before {
+                                            diagnostics.ltf_trigger_hit += 1;
+                                            diagnostics.rr_pass += 1;
                                         }
-                                    };
-                                    let tp = match self.tp_variant {
-                                        TpVariant::OpposingHtfSwing => prev_swing_high.high,
-                                        TpVariant::OpposingLtfSwing => prev_ltf_swing_high.high,
-                                    };
-                                    let before = trades.len();
-                                    trigger_mayne(
-                                        PositionDirection::Long,
-                                        self.trigger_type,
-                                        prev_ltf_swing_high.high,
-                                        sl,
-                                        tp,
-                                        self.rr_threshold,
-                                        next_candles,
-                                        &mut trades,
-                                        &self.execution,
-                                    );
-                                    if trades.len() > before {
-                                        diagnostics.ltf_trigger_hit += 1;
-                                        diagnostics.rr_pass += 1;
                                     }
                                 }
                             }
-                        }}
+                        }
                     }
                 }
 

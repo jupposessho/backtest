@@ -91,19 +91,73 @@ fn main() {
 
     // top-3 per asset from recent tune output
     let btc_cfgs = [
-        LegCfg { name: "btc_rr2_poi0_ob5_all_day", rr: Decimal::from(2), poi: 0, ob: 5, kz: KillzoneMode::Off },
-        LegCfg { name: "btc_rr1.8_poi0_ob5_all_day", rr: Decimal::new(18, 1), poi: 0, ob: 5, kz: KillzoneMode::Off },
-        LegCfg { name: "btc_rr2_poi5_ob5_all_day", rr: Decimal::from(2), poi: 5, ob: 5, kz: KillzoneMode::Off },
+        LegCfg {
+            name: "btc_rr2_poi0_ob5_all_day",
+            rr: Decimal::from(2),
+            poi: 0,
+            ob: 5,
+            kz: KillzoneMode::Off,
+        },
+        LegCfg {
+            name: "btc_rr1.8_poi0_ob5_all_day",
+            rr: Decimal::new(18, 1),
+            poi: 0,
+            ob: 5,
+            kz: KillzoneMode::Off,
+        },
+        LegCfg {
+            name: "btc_rr2_poi5_ob5_all_day",
+            rr: Decimal::from(2),
+            poi: 5,
+            ob: 5,
+            kz: KillzoneMode::Off,
+        },
     ];
     let eth_cfgs = [
-        LegCfg { name: "eth_rr2_poi0_ob0_ny_only", rr: Decimal::from(2), poi: 0, ob: 0, kz: KillzoneMode::NyOnly },
-        LegCfg { name: "eth_rr2_poi0_ob0_all_day", rr: Decimal::from(2), poi: 0, ob: 0, kz: KillzoneMode::Off },
-        LegCfg { name: "eth_rr1.8_poi0_ob0_ny_only", rr: Decimal::new(18, 1), poi: 0, ob: 0, kz: KillzoneMode::NyOnly },
+        LegCfg {
+            name: "eth_rr2_poi0_ob0_ny_only",
+            rr: Decimal::from(2),
+            poi: 0,
+            ob: 0,
+            kz: KillzoneMode::NyOnly,
+        },
+        LegCfg {
+            name: "eth_rr2_poi0_ob0_all_day",
+            rr: Decimal::from(2),
+            poi: 0,
+            ob: 0,
+            kz: KillzoneMode::Off,
+        },
+        LegCfg {
+            name: "eth_rr1.8_poi0_ob0_ny_only",
+            rr: Decimal::new(18, 1),
+            poi: 0,
+            ob: 0,
+            kz: KillzoneMode::NyOnly,
+        },
     ];
     let sol_cfgs = [
-        LegCfg { name: "sol_rr2_poi10_ob10_ny_only", rr: Decimal::from(2), poi: 10, ob: 10, kz: KillzoneMode::NyOnly },
-        LegCfg { name: "sol_rr1.8_poi10_ob10_ny_only", rr: Decimal::new(18, 1), poi: 10, ob: 10, kz: KillzoneMode::NyOnly },
-        LegCfg { name: "sol_rr1.5_poi10_ob10_ny_only", rr: Decimal::new(15, 1), poi: 10, ob: 10, kz: KillzoneMode::NyOnly },
+        LegCfg {
+            name: "sol_rr2_poi10_ob10_ny_only",
+            rr: Decimal::from(2),
+            poi: 10,
+            ob: 10,
+            kz: KillzoneMode::NyOnly,
+        },
+        LegCfg {
+            name: "sol_rr1.8_poi10_ob10_ny_only",
+            rr: Decimal::new(18, 1),
+            poi: 10,
+            ob: 10,
+            kz: KillzoneMode::NyOnly,
+        },
+        LegCfg {
+            name: "sol_rr1.5_poi10_ob10_ny_only",
+            rr: Decimal::new(15, 1),
+            poi: 10,
+            ob: 10,
+            kz: KillzoneMode::NyOnly,
+        },
     ];
 
     // sizing from user: BTC 0.1, ETH 1, SOL 10 vs 10-unit baseline
@@ -120,11 +174,29 @@ fn main() {
     let mut rows: Vec<(String, Decimal, usize, Vec<(String, Decimal)>)> = vec![];
 
     for b in btc_cfgs {
-        let bm = eval_leg(Arc::clone(&btc5), btc4.clone(), Decimal::new(2, 2), b, btc_mult);
+        let bm = eval_leg(
+            Arc::clone(&btc5),
+            btc4.clone(),
+            Decimal::new(2, 2),
+            b,
+            btc_mult,
+        );
         for e in eth_cfgs {
-            let em = eval_leg(Arc::clone(&eth5), eth4.clone(), Decimal::new(2, 2), e, eth_mult);
+            let em = eval_leg(
+                Arc::clone(&eth5),
+                eth4.clone(),
+                Decimal::new(2, 2),
+                e,
+                eth_mult,
+            );
             for s in sol_cfgs {
-                let sm = eval_leg(Arc::clone(&sol5), sol4.clone(), Decimal::new(1, 3), s, sol_mult);
+                let sm = eval_leg(
+                    Arc::clone(&sol5),
+                    sol4.clone(),
+                    Decimal::new(1, 3),
+                    s,
+                    sol_mult,
+                );
                 let mut pooled = BTreeMap::<String, Decimal>::new();
                 for (k, v) in bm.iter().chain(em.iter()).chain(sm.iter()) {
                     *pooled.entry(k.clone()).or_insert(Decimal::ZERO) += *v;
@@ -144,7 +216,12 @@ fn main() {
 
     rows.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
     for (name, total, pos, _) in rows.iter().take(10) {
-        println!("{},total={:.2},pos_months={}/6", name, total.round_dp(2), pos);
+        println!(
+            "{},total={:.2},pos_months={}/6",
+            name,
+            total.round_dp(2),
+            pos
+        );
     }
 
     println!();

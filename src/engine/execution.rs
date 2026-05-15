@@ -1,8 +1,8 @@
 use crate::engine::entry_policies::resolve_entry_policy;
 use crate::engine::types::{
-    apply_entry_slippage, apply_exit_slippage, risk_amount, stop_hit,
-    target_hit, EntryModel, EntryPolicy, ExecutionConfig, OpenPosition, SetupCandidate, StopModel,
-    TargetModel, TrailingModel,
+    apply_entry_slippage, apply_exit_slippage, risk_amount, stop_hit, target_hit, EntryModel,
+    EntryPolicy, ExecutionConfig, OpenPosition, SetupCandidate, StopModel, TargetModel,
+    TrailingModel,
 };
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -22,7 +22,11 @@ pub struct ExecutionMetrics {
     pub skipped_other: usize,
 }
 
-pub fn run_setups(candles: &[CandleStick], setups: &[SetupCandidate], cfg: &ExecutionConfig) -> Vec<Trade> {
+pub fn run_setups(
+    candles: &[CandleStick],
+    setups: &[SetupCandidate],
+    cfg: &ExecutionConfig,
+) -> Vec<Trade> {
     run_setups_with_metrics(candles, setups, cfg).0
 }
 
@@ -56,7 +60,7 @@ pub fn run_setups_with_metrics(
                     let previous = if i > 0 { candles[i - 1] } else { c };
                     let price = resolve_entry_policy(policy, candidate.direction, c, previous);
                     if c.low <= price && c.high >= price {
-                        open = build_position(candidate, DecimalVec(price.0), c.open_time, cfg);
+                        open = build_position(candidate, i, DecimalVec(price.0), c.open_time, cfg);
                         if open.is_some() {
                             metrics.limit_orders_filled += 1;
                             opened_this_bar = true;
@@ -66,11 +70,12 @@ pub fn run_setups_with_metrics(
                 }
             }
 
-            while open.is_none() && setup_idx < setups.len() && setups[setup_idx].signal_index == i {
+            while open.is_none() && setup_idx < setups.len() && setups[setup_idx].signal_index == i
+            {
                 let candidate = setups[setup_idx];
                 match candidate.entry {
                     EntryModel::SignalClose | EntryModel::MarketClose => {
-                        open = build_position(candidate, c.close, c.close_time, cfg);
+                        open = build_position(candidate, i, c.close, c.close_time, cfg);
                         if open.is_some() {
                             opened_this_bar = true;
                         }
@@ -78,7 +83,7 @@ pub fn run_setups_with_metrics(
                     EntryModel::NextBarOpen => {
                         if i + 1 < candles.len() {
                             let next = candles[i + 1];
-                            open = build_position(candidate, next.open, next.open_time, cfg);
+                            open = build_position(candidate, i + 1, next.open, next.open_time, cfg);
                             if open.is_some() {
                                 opened_this_bar = true;
                             }
@@ -87,14 +92,14 @@ pub fn run_setups_with_metrics(
                     EntryModel::LimitTouch { expiry_bars, .. } => {
                         if let EntryModel::LimitTouch { price, .. } = candidate.entry {
                             metrics.limit_orders_placed += 1;
-                            pending_limit = Some((
-                                candidate,
-                                i + expiry_bars,
-                                EntryPolicy::Price(price),
-                            ));
+                            pending_limit =
+                                Some((candidate, i + expiry_bars, EntryPolicy::Price(price)));
                         }
                     }
-                    EntryModel::LimitByPolicy { policy, expiry_bars } => {
+                    EntryModel::LimitByPolicy {
+                        policy,
+                        expiry_bars,
+                    } => {
                         metrics.limit_orders_placed += 1;
                         pending_limit = Some((candidate, i + expiry_bars, policy));
                     }
@@ -140,10 +145,25 @@ pub fn run_setups_with_metrics(
                 open = None;
             } else if target_hit(c, &p) {
                 let tp_fill = apply_exit_slippage(p.direction, p.target, cfg);
-                trades.push(build_trade(p, c.close_time, tp_fill, TradeResult::Winner, cfg));
+                trades.push(build_trade(
+                    p,
+                    c.close_time,
+                    tp_fill,
+                    TradeResult::Winner,
+                    cfg,
+                ));
                 open = None;
             } else {
                 apply_trailing(&mut p, c);
+                if let Some(max_hold_bars) = p.max_hold_bars {
+                    if i.saturating_sub(p.entry_index) >= max_hold_bars {
+                        let exit_px = apply_exit_slippage(p.direction, c.close, cfg);
+                        let result = time_exit_result(&p, exit_px);
+                        trades.push(build_trade(p, c.close_time, exit_px, result, cfg));
+                        open = None;
+                        continue;
+                    }
+                }
                 open = Some(p);
             }
         }
@@ -158,6 +178,7 @@ pub fn run_setups_with_metrics(
 
 fn build_position(
     candidate: SetupCandidate,
+    entry_index: usize,
     raw_entry: DecimalVec,
     open_time: i64,
     cfg: &ExecutionConfig,
@@ -173,16 +194,25 @@ fn build_position(
     let target = match candidate.target {
         TargetModel::FixedPrice(px) => px,
         TargetModel::FixedR(r) => match candidate.direction {
-            crate::model::position_direction::PositionDirection::Long => DecimalVec(entry.0 + risk * r),
-            crate::model::position_direction::PositionDirection::Short => DecimalVec(entry.0 - risk * r),
+            crate::model::position_direction::PositionDirection::Long => {
+                DecimalVec(entry.0 + risk * r)
+            }
+            crate::model::position_direction::PositionDirection::Short => {
+                DecimalVec(entry.0 - risk * r)
+            }
         },
         TargetModel::FixedPoints(points) => match candidate.direction {
-            crate::model::position_direction::PositionDirection::Long => DecimalVec(entry.0 + points),
-            crate::model::position_direction::PositionDirection::Short => DecimalVec(entry.0 - points),
+            crate::model::position_direction::PositionDirection::Long => {
+                DecimalVec(entry.0 + points)
+            }
+            crate::model::position_direction::PositionDirection::Short => {
+                DecimalVec(entry.0 - points)
+            }
         },
     };
     Some(OpenPosition {
         direction: candidate.direction,
+        entry_index,
         open_time,
         entry,
         stop,
@@ -190,7 +220,31 @@ fn build_position(
         target,
         initial_risk: risk,
         trailing: candidate.trailing,
+        max_hold_bars: candidate.max_hold_bars,
     })
+}
+
+fn time_exit_result(p: &OpenPosition, exit_px: DecimalVec) -> TradeResult {
+    match p.direction {
+        crate::model::position_direction::PositionDirection::Long => {
+            if exit_px.0 > p.entry.0 {
+                TradeResult::Winner
+            } else if exit_px.0 < p.entry.0 {
+                TradeResult::Expense
+            } else {
+                TradeResult::BreakEven
+            }
+        }
+        crate::model::position_direction::PositionDirection::Short => {
+            if exit_px.0 < p.entry.0 {
+                TradeResult::Winner
+            } else if exit_px.0 > p.entry.0 {
+                TradeResult::Expense
+            } else {
+                TradeResult::BreakEven
+            }
+        }
+    }
 }
 
 fn apply_trailing(position: &mut OpenPosition, c: CandleStick) {
@@ -312,7 +366,9 @@ fn build_trade(
     let notional = (p.entry.0 + exit_px.0) / Decimal::from(2);
     let commission = notional * cfg.commission_rate_per_side * Decimal::from(2);
     let fees = notional * cfg.fee_rate_per_side * Decimal::from(2);
-    let slippage = (cfg.tick_size * Decimal::from_i32(cfg.slippage_ticks_per_side).unwrap_or(Decimal::ZERO)).abs()
+    let slippage = (cfg.tick_size
+        * Decimal::from_i32(cfg.slippage_ticks_per_side).unwrap_or(Decimal::ZERO))
+    .abs()
         * Decimal::from(2);
     Trade {
         direction: p.direction,

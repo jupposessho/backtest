@@ -19,15 +19,21 @@ fn main() {
         .unwrap_or("gold");
 
     let loaded = match source {
-        "gold" => CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/gold_1m_cont.parquet")),
-        "mnq" => CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet")),
-        "mes" => CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mes_1m_cont.parquet")),
-        "binance5m" => CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(include_str!(
-            "../assets/binance_BTCUSDT_5m.json"
-        ))),
-        "binance15m" => CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(include_str!(
-            "../assets/binance_BTCUSDT_15m.json"
-        ))),
+        "gold" => CandleStickLoader::load_source(CandleDataSource::ParquetPath(
+            "assets/gold_1m_cont.parquet",
+        )),
+        "mnq" => CandleStickLoader::load_source(CandleDataSource::ParquetPath(
+            "assets/mnq_1m_cont.parquet",
+        )),
+        "mes" => CandleStickLoader::load_source(CandleDataSource::ParquetPath(
+            "assets/mes_1m_cont.parquet",
+        )),
+        "binance5m" => CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(
+            include_str!("../assets/binance_BTCUSDT_5m.json"),
+        )),
+        "binance15m" => CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(
+            include_str!("../assets/binance_BTCUSDT_15m.json"),
+        )),
         _ => unreachable!(),
     };
 

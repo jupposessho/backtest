@@ -3,7 +3,10 @@ extern crate rust_decimal;
 use backtest::{
     candle_stick_loader::CandleStickLoader,
     engine::types::ExecutionConfig,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, decimal::DecimalVec, session::Session, sl_trategy::SlStrategy, trading_model::TradingModel},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, decimal::DecimalVec,
+        session::Session, sl_trategy::SlStrategy, trading_model::TradingModel,
+    },
     parse_datetime,
     strategies::macro_soup::MacroSoup,
 };
@@ -116,14 +119,19 @@ fn main() {
 
         let tested = rows.len();
         let profitable = rows.iter().filter(|r| r.profit_r > Decimal::ZERO).count();
-        let pf_ge_12 = rows.iter().filter(|r| r.pf_r >= Decimal::new(12, 1)).count();
+        let pf_ge_12 = rows
+            .iter()
+            .filter(|r| r.pf_r >= Decimal::new(12, 1))
+            .count();
 
         md.push_str(&format!("## Slippage {} Tick(s)\n\n", slip));
         md.push_str(&format!(
             "- Tested ranges: {}\n- Profit_r > 0: {}\n- PF >= 1.20: {}\n\n",
             tested, profitable, pf_ge_12
         ));
-        md.push_str("| start | end | trades | win_rate_% | profit_r | pf_r | pnl_% | points | costs |\n");
+        md.push_str(
+            "| start | end | trades | win_rate_% | profit_r | pf_r | pnl_% | points | costs |\n",
+        );
         md.push_str("|---|---|---:|---:|---:|---:|---:|---:|---:|\n");
         for r in rows.iter().take(20) {
             md.push_str(&format!(

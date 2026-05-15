@@ -7,7 +7,9 @@ use rust_decimal::Decimal;
 use backtest::{
     candle_stick_loader::{CandleDataSource, CandleStickLoader},
     execute,
-    model::{backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult},
+    model::{
+        backtest_result::BacktestResult, candle_stick::CandleStick, trade_result::TradeResult,
+    },
     strategies::orb_london_reversal::{OrbLondonReversal, OrbLondonReversalConfig},
 };
 
@@ -29,7 +31,8 @@ struct Candidate {
 }
 
 fn load_parquet(path: &str) -> Vec<CandleStick> {
-    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path)).expect("failed loading parquet")
+    CandleStickLoader::load_source(CandleDataSource::ParquetPath(path))
+        .expect("failed loading parquet")
 }
 
 fn summarize(result: &BacktestResult) -> (usize, Decimal, Decimal, Decimal, Decimal, Decimal) {
@@ -38,8 +41,9 @@ fn summarize(result: &BacktestResult) -> (usize, Decimal, Decimal, Decimal, Deci
     let win_rate = if total == 0 {
         Decimal::ZERO
     } else {
-        (Decimal::from_i32(wins as i32).unwrap() / Decimal::from_i32(total as i32).unwrap() * Decimal::from(100))
-            .round_dp(2)
+        (Decimal::from_i32(wins as i32).unwrap() / Decimal::from_i32(total as i32).unwrap()
+            * Decimal::from(100))
+        .round_dp(2)
     };
 
     let mut capital = Decimal::from(1000);
@@ -76,9 +80,17 @@ fn summarize(result: &BacktestResult) -> (usize, Decimal, Decimal, Decimal, Deci
     } else {
         Decimal::ZERO
     };
-    let pnl_pct = ((capital - Decimal::from(1000)) / Decimal::from(1000) * Decimal::from(100)).round_dp(2);
+    let pnl_pct =
+        ((capital - Decimal::from(1000)) / Decimal::from(1000) * Decimal::from(100)).round_dp(2);
     let net_usd = (capital - Decimal::from(1000)).round_dp(2);
-    (total, win_rate, pf, pnl_pct, net_usd, max_dd_abs.round_dp(2))
+    (
+        total,
+        win_rate,
+        pf,
+        pnl_pct,
+        net_usd,
+        max_dd_abs.round_dp(2),
+    )
 }
 
 fn eval(
@@ -175,8 +187,22 @@ fn main() {
         .collect();
 
     println!("Top 10 by score = net_usd - 0.3*maxdd_usd");
-    println!("{:<5} {:<4} {:<5} {:<5} {:<8} {:<5} {:<8} {:>6} {:>6} {:>6} {:>8} {:>9} {:>9}",
-        "asset", "orb", "close", "exc%", "reenter", "be_r", "tstop", "trades", "win%", "pf", "pnl%", "net_usd", "maxdd$");
+    println!(
+        "{:<5} {:<4} {:<5} {:<5} {:<8} {:<5} {:<8} {:>6} {:>6} {:>6} {:>8} {:>9} {:>9}",
+        "asset",
+        "orb",
+        "close",
+        "exc%",
+        "reenter",
+        "be_r",
+        "tstop",
+        "trades",
+        "win%",
+        "pf",
+        "pnl%",
+        "net_usd",
+        "maxdd$"
+    );
     println!("{}", "-".repeat(120));
     for c in all.iter().take(10) {
         println!(
@@ -185,9 +211,15 @@ fn main() {
             format!("{}m", c.orb_mins),
             format!("{}:00", c.close_h),
             c.min_exc,
-            c.max_reenter.map(|v| v.to_string()).unwrap_or_else(|| "none".to_string()),
-            c.be_r.map(|v| v.to_string()).unwrap_or_else(|| "none".to_string()),
-            c.time_stop.map(|v| v.to_string()).unwrap_or_else(|| "none".to_string()),
+            c.max_reenter
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            c.be_r
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            c.time_stop
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "none".to_string()),
             c.trades,
             c.win_rate,
             c.pf,
@@ -202,8 +234,22 @@ fn main() {
         "Tradable filter: pf>={} net_usd>={} maxdd_usd<={} trades>={}",
         min_pf, min_net_usd, max_dd_usd, min_trades
     );
-    println!("{:<5} {:<4} {:<5} {:<5} {:<8} {:<5} {:<8} {:>6} {:>6} {:>6} {:>8} {:>9} {:>9}",
-        "asset", "orb", "close", "exc%", "reenter", "be_r", "tstop", "trades", "win%", "pf", "pnl%", "net_usd", "maxdd$");
+    println!(
+        "{:<5} {:<4} {:<5} {:<5} {:<8} {:<5} {:<8} {:>6} {:>6} {:>6} {:>8} {:>9} {:>9}",
+        "asset",
+        "orb",
+        "close",
+        "exc%",
+        "reenter",
+        "be_r",
+        "tstop",
+        "trades",
+        "win%",
+        "pf",
+        "pnl%",
+        "net_usd",
+        "maxdd$"
+    );
     println!("{}", "-".repeat(120));
     for c in tradable.iter().take(20) {
         println!(
@@ -212,9 +258,15 @@ fn main() {
             format!("{}m", c.orb_mins),
             format!("{}:00", c.close_h),
             c.min_exc,
-            c.max_reenter.map(|v| v.to_string()).unwrap_or_else(|| "none".to_string()),
-            c.be_r.map(|v| v.to_string()).unwrap_or_else(|| "none".to_string()),
-            c.time_stop.map(|v| v.to_string()).unwrap_or_else(|| "none".to_string()),
+            c.max_reenter
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            c.be_r
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            c.time_stop
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "none".to_string()),
             c.trades,
             c.win_rate,
             c.pf,

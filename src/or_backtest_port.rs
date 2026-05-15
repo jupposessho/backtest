@@ -265,8 +265,12 @@ fn parse_hhmm(s: &str) -> Result<NaiveTime> {
     if parts.len() != 2 {
         return Err(anyhow!("Invalid HH:MM time: {s}"));
     }
-    let hh: u32 = parts[0].parse().with_context(|| format!("Invalid hour in {s}"))?;
-    let mm: u32 = parts[1].parse().with_context(|| format!("Invalid minute in {s}"))?;
+    let hh: u32 = parts[0]
+        .parse()
+        .with_context(|| format!("Invalid hour in {s}"))?;
+    let mm: u32 = parts[1]
+        .parse()
+        .with_context(|| format!("Invalid minute in {s}"))?;
     NaiveTime::from_hms_opt(hh, mm, 0).ok_or_else(|| anyhow!("Invalid HH:MM time: {s}"))
 }
 
@@ -352,11 +356,19 @@ fn get_stop_loss(
     match sl_type {
         "Range %" => {
             let d = range_size * sl_value / 100.0;
-            Ok(if is_long { entry_price - d } else { entry_price + d })
+            Ok(if is_long {
+                entry_price - d
+            } else {
+                entry_price + d
+            })
         }
         "ATR Multiple" => {
             let d = atr_value * sl_value;
-            Ok(if is_long { entry_price - d } else { entry_price + d })
+            Ok(if is_long {
+                entry_price - d
+            } else {
+                entry_price + d
+            })
         }
         "Fixed %" => Ok(if is_long {
             entry_price * (1.0 - sl_value / 100.0)
@@ -391,11 +403,19 @@ fn get_take_profit(
         }),
         "Range %" => {
             let d = range_size * tp_value / 100.0;
-            Ok(if is_long { entry_price + d } else { entry_price - d })
+            Ok(if is_long {
+                entry_price + d
+            } else {
+                entry_price - d
+            })
         }
         "ATR Multiple" => {
             let d = atr_value * tp_value;
-            Ok(if is_long { entry_price + d } else { entry_price - d })
+            Ok(if is_long {
+                entry_price + d
+            } else {
+                entry_price - d
+            })
         }
         "Fixed %" => Ok(if is_long {
             entry_price * (1.0 + tp_value / 100.0)
@@ -475,10 +495,7 @@ fn load_deduped_data(cfg: &Config) -> Result<Vec<BarRow>> {
     }
 
     rows.sort_by(|a, b| match a.datetime_utc.cmp(&b.datetime_utc) {
-        Ordering::Equal => b
-            .volume
-            .partial_cmp(&a.volume)
-            .unwrap_or(Ordering::Equal),
+        Ordering::Equal => b.volume.partial_cmp(&a.volume).unwrap_or(Ordering::Equal),
         ord => ord,
     });
 
@@ -845,7 +862,9 @@ fn backtest_reversal(df: &[BarRow], cfg: &Config, spec: &ReversalSpec) -> Result
                 if row.high > pre_high * (1.0 + spec.sweep_tolerance_pct) && row.close < pre_high {
                     sweep_side = Some(SweepSide::High);
                     sweep_extreme = row.high;
-                } else if row.low < pre_low * (1.0 - spec.sweep_tolerance_pct) && row.close > pre_low {
+                } else if row.low < pre_low * (1.0 - spec.sweep_tolerance_pct)
+                    && row.close > pre_low
+                {
                     sweep_side = Some(SweepSide::Low);
                     sweep_extreme = row.low;
                 }
@@ -1154,7 +1173,13 @@ fn backtest(df: &[BarRow], cfg: &Config) -> Result<Vec<Trade>> {
                         // - Close: use current close.
                         // - NextOpen: use next bar open (if available), otherwise skip signal.
                         let e_intended = match cfg.entry_fill_mode {
-                            EntryFillMode::Boundary => if cfg.reverse_logic { c } else { session_high },
+                            EntryFillMode::Boundary => {
+                                if cfg.reverse_logic {
+                                    c
+                                } else {
+                                    session_high
+                                }
+                            }
                             EntryFillMode::Close => c,
                             EntryFillMode::NextOpen => {
                                 if i + 1 >= trade_rows.len() {
@@ -1235,7 +1260,13 @@ fn backtest(df: &[BarRow], cfg: &Config) -> Result<Vec<Trade>> {
                         let is_long = direction == Direction::Long;
 
                         let e_intended = match cfg.entry_fill_mode {
-                            EntryFillMode::Boundary => if cfg.reverse_logic { c } else { session_low },
+                            EntryFillMode::Boundary => {
+                                if cfg.reverse_logic {
+                                    c
+                                } else {
+                                    session_low
+                                }
+                            }
                             EntryFillMode::Close => c,
                             EntryFillMode::NextOpen => {
                                 if i + 1 >= trade_rows.len() {
@@ -1322,7 +1353,13 @@ fn backtest(df: &[BarRow], cfg: &Config) -> Result<Vec<Trade>> {
 
                         // Determine intended entry based on fill mode (same rules as primary entries).
                         let e_intended = match cfg.entry_fill_mode {
-                            EntryFillMode::Boundary => if cfg.reverse_logic { c } else { session_low },
+                            EntryFillMode::Boundary => {
+                                if cfg.reverse_logic {
+                                    c
+                                } else {
+                                    session_low
+                                }
+                            }
                             EntryFillMode::Close => c,
                             EntryFillMode::NextOpen => {
                                 if i + 1 >= trade_rows.len() {
@@ -1405,7 +1442,13 @@ fn backtest(df: &[BarRow], cfg: &Config) -> Result<Vec<Trade>> {
 
                         // Determine intended entry based on fill mode (same rules as primary entries).
                         let e_intended = match cfg.entry_fill_mode {
-                            EntryFillMode::Boundary => if cfg.reverse_logic { c } else { session_high },
+                            EntryFillMode::Boundary => {
+                                if cfg.reverse_logic {
+                                    c
+                                } else {
+                                    session_high
+                                }
+                            }
                             EntryFillMode::Close => c,
                             EntryFillMode::NextOpen => {
                                 if i + 1 >= trade_rows.len() {
@@ -1530,7 +1573,11 @@ fn summarize(trades: &[Trade]) -> Stats {
         }
     }
 
-    let rr_vals: Vec<f64> = trades.iter().map(|t| t.rr).filter(|x| x.is_finite()).collect();
+    let rr_vals: Vec<f64> = trades
+        .iter()
+        .map(|t| t.rr)
+        .filter(|x| x.is_finite())
+        .collect();
     let avg_rr = mean(&rr_vals);
     let expectancy_rr = mean(&rr_vals);
     let winrate = if n > 0 {
@@ -1620,7 +1667,13 @@ fn mean(xs: &[f64]) -> f64 {
 }
 
 fn iter_reasonable_variations(base: &Config) -> Vec<Config> {
-    let or_durations = ["5 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "60 Minutes"];
+    let or_durations = [
+        "5 Minutes",
+        "15 Minutes",
+        "30 Minutes",
+        "45 Minutes",
+        "60 Minutes",
+    ];
     let breakout_candles = [1usize, 2, 3, 4];
     let reverse_logic = [false, true];
     let enable_second_chance = [false, true];
@@ -1692,7 +1745,13 @@ fn compare_desc_nan_last(a: f64, b: f64) -> Ordering {
     }
 }
 
-fn run_sweep(df: &[BarRow], base_cfg: &Config, top_n: usize, min_trades: usize, sort_key: SortKey) -> Result<()> {
+fn run_sweep(
+    df: &[BarRow],
+    base_cfg: &Config,
+    top_n: usize,
+    min_trades: usize,
+    sort_key: SortKey,
+) -> Result<()> {
     let mut rows: Vec<SweepRow> = Vec::new();
 
     // Extra realism guardrails for sweep ranking:
@@ -1719,8 +1778,16 @@ fn run_sweep(df: &[BarRow], base_cfg: &Config, top_n: usize, min_trades: usize, 
                 loss_sum += t.pnl_usd; // negative
             }
         }
-        let avg_loss = if losers > 0 { loss_sum / losers as f64 } else { f64::NAN };
-        let avg_loss_mag = if avg_loss.is_finite() { avg_loss.abs() } else { f64::NAN };
+        let avg_loss = if losers > 0 {
+            loss_sum / losers as f64
+        } else {
+            f64::NAN
+        };
+        let avg_loss_mag = if avg_loss.is_finite() {
+            avg_loss.abs()
+        } else {
+            f64::NAN
+        };
 
         if losers < MIN_LOSERS {
             continue;
@@ -1736,7 +1803,11 @@ fn run_sweep(df: &[BarRow], base_cfg: &Config, top_n: usize, min_trades: usize, 
         let conservative_score = (stats.net_profit_usd * stats.profit_factor) / dd_penalty;
 
         rows.push(SweepRow {
-            score: if sort_key == SortKey::Score { conservative_score } else { stats.score },
+            score: if sort_key == SortKey::Score {
+                conservative_score
+            } else {
+                stats.score
+            },
             net_profit_usd: stats.net_profit_usd,
             profit_factor: stats.profit_factor,
             max_drawdown_usd: stats.max_drawdown_usd,
@@ -1761,7 +1832,9 @@ fn run_sweep(df: &[BarRow], base_cfg: &Config, top_n: usize, min_trades: usize, 
         return Ok(());
     }
 
-    rows.sort_by(|a, b| compare_desc_nan_last(metric_for_sort(a, sort_key), metric_for_sort(b, sort_key)));
+    rows.sort_by(|a, b| {
+        compare_desc_nan_last(metric_for_sort(a, sort_key), metric_for_sort(b, sort_key))
+    });
 
     println!("\n=== Sweep Results (top configs) ===");
     println!(
@@ -1803,7 +1876,10 @@ fn run_sweep(df: &[BarRow], base_cfg: &Config, top_n: usize, min_trades: usize, 
     println!("{:20}: {}", "or_duration", best.or_duration);
     println!("{:20}: {}", "breakout_candles", best.breakout_candles);
     println!("{:20}: {}", "reverse_logic", best.reverse_logic);
-    println!("{:20}: {}", "enable_second_chance", best.enable_second_chance);
+    println!(
+        "{:20}: {}",
+        "enable_second_chance", best.enable_second_chance
+    );
     println!("{:20}: {}", "last_entry_time", best.last_entry_time);
     println!("{:20}: {}", "sl_type", best.sl_type);
     println!("{:20}: {:.4}", "sl_value", best.sl_value);
@@ -1814,7 +1890,8 @@ fn run_sweep(df: &[BarRow], base_cfg: &Config, top_n: usize, min_trades: usize, 
 }
 
 fn save_trades(path: &str, trades: &[Trade]) -> Result<()> {
-    let mut wtr = csv::Writer::from_path(path).with_context(|| format!("Failed to open output CSV: {path}"))?;
+    let mut wtr = csv::Writer::from_path(path)
+        .with_context(|| format!("Failed to open output CSV: {path}"))?;
     wtr.write_record([
         "date",
         "direction",
@@ -1889,7 +1966,13 @@ fn main() -> Result<()> {
     let df = load_deduped_data(&cfg)?;
     if args.sweep {
         if strategy_is_orb(cfg.strategy) {
-            run_sweep(&df, &cfg, args.sweep_top, args.sweep_min_trades, args.sweep_sort)?;
+            run_sweep(
+                &df,
+                &cfg,
+                args.sweep_top,
+                args.sweep_min_trades,
+                args.sweep_sort,
+            )?;
         } else {
             println!("\nSweep is currently supported for ORB-family strategies only.");
         }

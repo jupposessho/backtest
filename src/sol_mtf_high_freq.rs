@@ -73,7 +73,11 @@ fn main() {
     }
     let htf_data = Arc::new(htf_vec);
 
-    let entries = [EntryVariant::Close, EntryVariant::ObLevel, EntryVariant::ObMidpoint];
+    let entries = [
+        EntryVariant::Close,
+        EntryVariant::ObLevel,
+        EntryVariant::ObMidpoint,
+    ];
     let confirms = [
         ReversalConfirmMode::IfvgOnly,
         ReversalConfirmMode::CisdOrIfvg,
@@ -84,7 +88,11 @@ fn main() {
         Decimal::new(12, 1),
         Decimal::new(15, 1),
     ];
-    let killzones = [KillzoneMode::Off, KillzoneMode::LondonNy, KillzoneMode::NyOnly];
+    let killzones = [
+        KillzoneMode::Off,
+        KillzoneMode::LondonNy,
+        KillzoneMode::NyOnly,
+    ];
     let poi_pads = [0, 5, 10];
     let ob_tols = [0, 5, 10];
 
@@ -181,12 +189,7 @@ fn main() {
     for r in rows.iter().take(20) {
         println!(
             "{},{:.2},{},{},{},{}",
-            r.name,
-            r.net_6m_usd,
-            r.positive_months,
-            r.trades,
-            r.wins,
-            r.losses
+            r.name, r.net_6m_usd, r.positive_months, r.trades, r.wins, r.losses
         );
     }
 }

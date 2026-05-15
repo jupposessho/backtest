@@ -73,7 +73,11 @@ fn cap_pair(
     (htf, ltf)
 }
 
-fn sweep_pair(pair: &'static str, htf_data: Vec<CandleStick>, ltf_data: Vec<CandleStick>) -> Vec<Row> {
+fn sweep_pair(
+    pair: &'static str,
+    htf_data: Vec<CandleStick>,
+    ltf_data: Vec<CandleStick>,
+) -> Vec<Row> {
     let patterns = [
         ReversalPattern::Mss,
         ReversalPattern::Ob,
@@ -124,7 +128,7 @@ fn sweep_pair(pair: &'static str, htf_data: Vec<CandleStick>, ltf_data: Vec<Cand
                             } else {
                                 (Decimal::from(winners as i64) * Decimal::from(100)
                                     / Decimal::from(trades as i64))
-                                    .trunc_with_scale(2)
+                                .trunc_with_scale(2)
                             };
                             let pnl = result.pnl();
                             let verdict = if trades >= 5 && pnl > Decimal::ZERO {
@@ -169,7 +173,9 @@ fn build_report(rows: &[Row]) -> String {
     out.push_str("# Mayne ETH Detailed Sweep Grid\n\n");
     out.push_str("Pairs: ETH 4h/15m and ETH 1h/5m.\n");
     out.push_str("Grid: reversal_pattern x sl_variant x tp_variant x trigger_type x rr_threshold x ifvg_max_confirm_bars.\n");
-    out.push_str("Verdict rule for this sheet: `PROMOTE` if trades >= 5 and pnl_pct > 0, else `REJECT`.\n\n");
+    out.push_str(
+        "Verdict rule for this sheet: `PROMOTE` if trades >= 5 and pnl_pct > 0, else `REJECT`.\n\n",
+    );
 
     out.push_str("## Validation Matrix\n\n");
     out.push_str("| strategy | asset | pair | configs | active_configs | profitable_configs | best_pnl_% | best_profit_r | best_trades | best_config |\n");

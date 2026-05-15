@@ -38,8 +38,8 @@ fn load_mnq_1m() -> Vec<CandleStick> {
 
 fn load_binance_tf(symbol: &str, tf: &str) -> Vec<CandleStick> {
     let path = format!("assets/binance_{}USDT_{}.json", symbol, tf);
-    let raw = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed loading {}: {}", path, e));
+    let raw =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed loading {}: {}", path, e));
     CandleStickLoader::load_source(CandleDataSource::BinanceJsonStr(&raw))
         .unwrap_or_else(|e| panic!("failed parsing {}: {}", path, e))
 }
@@ -172,7 +172,11 @@ fn split_equal_windows(data: &[CandleStick], windows: usize) -> Vec<Vec<CandleSt
     let mut out = Vec::new();
     for i in 0..windows {
         let start = i * chunk;
-        let end = if i == windows - 1 { data.len() } else { (i + 1) * chunk };
+        let end = if i == windows - 1 {
+            data.len()
+        } else {
+            (i + 1) * chunk
+        };
         out.push(data[start..end].to_vec());
     }
     out
@@ -391,27 +395,23 @@ fn main() {
     targeted_grid.push_str("# OB Engulfing Targeted Grid\n\n");
     targeted_grid.push_str("| section | variant | asset | timeframe | split | trades | win_rate_% | profit_r | pf_r | pnl_% | verdict |\n");
     targeted_grid.push_str("|---|---|---|---|---|---:|---:|---:|---:|---:|---|\n");
-    let mut push_grid = |section: &str,
-                         asset: &str,
-                         tf: &str,
-                         split: &str,
-                         verdict: &str,
-                         row: &VariantResult| {
-        targeted_grid.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
-            section,
-            row.label,
-            asset,
-            tf,
-            split,
-            row.trades,
-            row.win_rate.round_dp(2),
-            row.profit_r.round_dp(2),
-            row.profit_factor_r.round_dp(2),
-            row.pnl_pct.round_dp(2),
-            verdict,
-        ));
-    };
+    let mut push_grid =
+        |section: &str, asset: &str, tf: &str, split: &str, verdict: &str, row: &VariantResult| {
+            targeted_grid.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+                section,
+                row.label,
+                asset,
+                tf,
+                split,
+                row.trades,
+                row.win_rate.round_dp(2),
+                row.profit_r.round_dp(2),
+                row.profit_factor_r.round_dp(2),
+                row.pnl_pct.round_dp(2),
+                verdict,
+            ));
+        };
 
     let quick = vec![
         Variant {
@@ -644,7 +644,11 @@ fn main() {
     }
 
     println!("\n--- Narrow Confirmation + Date Split ---");
-    let caps = [Decimal::new(275, 1), Decimal::from(30), Decimal::new(325, 1)];
+    let caps = [
+        Decimal::new(275, 1),
+        Decimal::from(30),
+        Decimal::new(325, 1),
+    ];
     let rrs = [Decimal::new(19, 1), Decimal::from(2), Decimal::new(21, 1)];
     let modes = [
         (MaxSlMode::KeepEntryMoveStop, "keep_entry_move_stop"),
@@ -750,7 +754,10 @@ fn main() {
         config: prod_cfg,
     }
     .execute();
-    print_stats("prod_candidate cap32.5 rr2 keep_entry_move_stop", &prod_result);
+    print_stats(
+        "prod_candidate cap32.5 rr2 keep_entry_move_stop",
+        &prod_result,
+    );
 
     println!("\n--- ETH Transfer Test (5m,15m,1h,4h) ---");
     let eth_tfs = ["5m", "15m", "1h", "4h"];
@@ -829,7 +836,9 @@ fn main() {
     report.push_str("- Quality: body>=40%, range>=1.1x prev\n");
     report.push_str("- RR: 2.0\n");
     report.push_str("- Max SL: 32.5 points, mode: KeepEntryMoveStop\n");
-    report.push_str("- Full-data stats: trades=120, win%=43.33, profit_r=35.70, pf_r=1.52, pnl%=33.92\n");
+    report.push_str(
+        "- Full-data stats: trades=120, win%=43.33, profit_r=35.70, pf_r=1.52, pnl%=33.92\n",
+    );
     report.push_str("- Net points: 2264.87\n");
     report.push_str("- Net profit (MNQ $2/point, 1 contract): $4529.74\n\n");
 
@@ -850,9 +859,21 @@ fn main() {
     }
 
     println!("\n--- ETH Focused Refinement Sweep (15m,4h) ---");
-    let rr_grid = [Decimal::new(18, 1), Decimal::new(20, 1), Decimal::new(22, 1)];
-    let sl_grid = [Decimal::new(275, 1), Decimal::from(30), Decimal::new(325, 1)];
-    let body_grid = [Decimal::new(35, 2), Decimal::new(40, 2), Decimal::new(45, 2)];
+    let rr_grid = [
+        Decimal::new(18, 1),
+        Decimal::new(20, 1),
+        Decimal::new(22, 1),
+    ];
+    let sl_grid = [
+        Decimal::new(275, 1),
+        Decimal::from(30),
+        Decimal::new(325, 1),
+    ];
+    let body_grid = [
+        Decimal::new(35, 2),
+        Decimal::new(40, 2),
+        Decimal::new(45, 2),
+    ];
     let range_prev_grid = [Decimal::ZERO, Decimal::new(11, 1), Decimal::new(12, 1)];
     let tfs = ["15m", "4h"];
 
@@ -886,7 +907,8 @@ fn main() {
                             trend_filter: TrendFilter::None,
                             trade_window: None,
                             execution: ExecutionConfig {
-                                market_entry: backtest::strategies::mc::MarketEntryMode::NextBarOpen,
+                                market_entry:
+                                    backtest::strategies::mc::MarketEntryMode::NextBarOpen,
                                 commission_rate_per_side: Decimal::ZERO,
                                 fee_rate_per_side: Decimal::ZERO,
                                 slippage_ticks_per_side: 1,
@@ -1000,7 +1022,11 @@ fn main() {
         let train = slice_between(&data, min_ts, split_ts);
         let test = slice_between(&data, split_ts, max_ts + 1);
 
-        let train_row = run_config(train, winner_cfg.clone(), &format!("ETH {} winner train", tf));
+        let train_row = run_config(
+            train,
+            winner_cfg.clone(),
+            &format!("ETH {} winner train", tf),
+        );
         let test_row = run_config(test, winner_cfg, &format!("ETH {} winner test", tf));
         push_grid("eth_winner_split", "ETH", tf, "train", "TESTED", &train_row);
         push_grid("eth_winner_split", "ETH", tf, "test", "TESTED", &test_row);
@@ -1094,7 +1120,10 @@ fn main() {
                 },
                 max_sl_points: Some(Decimal::from(30)),
                 max_sl_mode: MaxSlMode::KeepEntryMoveStop,
-                trend_filter: TrendFilter::Ema { fast: 50, slow: 200 },
+                trend_filter: TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trade_window: None,
                 execution: ExecutionConfig {
                     market_entry: backtest::strategies::mc::MarketEntryMode::NextBarOpen,
@@ -1156,7 +1185,10 @@ fn main() {
                 },
                 max_sl_points: Some(Decimal::from(30)),
                 max_sl_mode: MaxSlMode::KeepEntryMoveStop,
-                trend_filter: TrendFilter::Ema { fast: 50, slow: 200 },
+                trend_filter: TrendFilter::Ema {
+                    fast: 50,
+                    slow: 200,
+                },
                 trade_window: None,
                 execution: ExecutionConfig {
                     market_entry: backtest::strategies::mc::MarketEntryMode::NextBarOpen,
@@ -1191,7 +1223,14 @@ fn main() {
                 r.profit_factor_r.round_dp(2),
                 r.pnl_pct.round_dp(2)
             ));
-            push_grid("eth_rolling_oos", "ETH", if name.contains("15m") { "15m" } else { "4h" }, &format!("W{}", i + 1), "TESTED", &r);
+            push_grid(
+                "eth_rolling_oos",
+                "ETH",
+                if name.contains("15m") { "15m" } else { "4h" },
+                &format!("W{}", i + 1),
+                "TESTED",
+                &r,
+            );
         }
         let verdict = if pass_profit >= 4 && pass_pf >= 4 {
             "PROMOTE"

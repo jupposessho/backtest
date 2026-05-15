@@ -1,9 +1,9 @@
 use crate::engine::context::MarketContext;
 use crate::engine::detection::SetupDetector;
-use crate::engine::types::SetupCandidate;
-use crate::model::position_direction::PositionDirection;
-use crate::model::candle_stick::CandleStick;
 use crate::engine::ict::sweep::SweepSignal;
+use crate::engine::types::SetupCandidate;
+use crate::model::candle_stick::CandleStick;
+use crate::model::position_direction::PositionDirection;
 
 #[derive(Clone, Copy)]
 pub struct MssSignal {

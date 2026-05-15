@@ -27,7 +27,11 @@ fn load(path: &str) -> Vec<CandleStick> {
     CandleStickLoader::load_binance(&s)
 }
 
-fn eval(ltf: Arc<Vec<CandleStick>>, mut htf: Vec<CandleStick>, c: Cfg) -> (BTreeMap<String, Decimal>, BTreeMap<String, Decimal>) {
+fn eval(
+    ltf: Arc<Vec<CandleStick>>,
+    mut htf: Vec<CandleStick>,
+    c: Cfg,
+) -> (BTreeMap<String, Decimal>, BTreeMap<String, Decimal>) {
     if let Some(last) = ltf.last().map(|x| x.open_time) {
         htf.retain(|x| x.open_time <= last);
     }
@@ -67,10 +71,34 @@ fn main() {
     let htf = load("assets/binance_SOLUSDT_4h.json");
 
     let cfgs = [
-        Cfg { name: "close_ifvg_rr2_poi10_ob10_ny_only", rr: Decimal::from(2), poi: 10, ob: 10, kz: KillzoneMode::NyOnly },
-        Cfg { name: "close_ifvg_rr1.8_poi10_ob10_ny_only", rr: Decimal::new(18,1), poi: 10, ob: 10, kz: KillzoneMode::NyOnly },
-        Cfg { name: "close_ifvg_rr1.5_poi10_ob10_ny_only", rr: Decimal::new(15,1), poi: 10, ob: 10, kz: KillzoneMode::NyOnly },
-        Cfg { name: "close_ifvg_rr2_poi0_ob10_all_day", rr: Decimal::from(2), poi: 0, ob: 10, kz: KillzoneMode::Off },
+        Cfg {
+            name: "close_ifvg_rr2_poi10_ob10_ny_only",
+            rr: Decimal::from(2),
+            poi: 10,
+            ob: 10,
+            kz: KillzoneMode::NyOnly,
+        },
+        Cfg {
+            name: "close_ifvg_rr1.8_poi10_ob10_ny_only",
+            rr: Decimal::new(18, 1),
+            poi: 10,
+            ob: 10,
+            kz: KillzoneMode::NyOnly,
+        },
+        Cfg {
+            name: "close_ifvg_rr1.5_poi10_ob10_ny_only",
+            rr: Decimal::new(15, 1),
+            poi: 10,
+            ob: 10,
+            kz: KillzoneMode::NyOnly,
+        },
+        Cfg {
+            name: "close_ifvg_rr2_poi0_ob10_all_day",
+            rr: Decimal::from(2),
+            poi: 0,
+            ob: 10,
+            kz: KillzoneMode::Off,
+        },
     ];
 
     for c in cfgs {
@@ -84,13 +112,28 @@ fn main() {
         let mut rs = Decimal::ZERO;
         let mut op = 0usize;
         let mut rp = 0usize;
-        for (_, v) in ol { os += **v; if **v > Decimal::ZERO { op += 1; } }
-        for (_, v) in rl { rs += **v; if **v > Decimal::ZERO { rp += 1; } }
+        for (_, v) in ol {
+            os += **v;
+            if **v > Decimal::ZERO {
+                op += 1;
+            }
+        }
+        for (_, v) in rl {
+            rs += **v;
+            if **v > Decimal::ZERO {
+                rp += 1;
+            }
+        }
 
         println!("config: {}", c.name);
         println!(
             "original_6m_usd={:.2} pos_months={}/{} | reversed_6m_usd={:.2} pos_months={}/{}",
-            os.round_dp(2), op, n, rs.round_dp(2), rp, n
+            os.round_dp(2),
+            op,
+            n,
+            rs.round_dp(2),
+            rp,
+            n
         );
         println!("month,orig_usd,reversed_usd");
         for i in 0..n {

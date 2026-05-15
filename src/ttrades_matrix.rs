@@ -17,7 +17,8 @@ use backtest::{
     strategies::{
         ttrades_fractal::{FractalConfig, TTradesFractal},
         ttrades_fractal_mtf::{
-            EntryVariant, FractalMTFConfig, KillzoneMode, ReversalConfirmMode, TTradesFractalMTF,
+            CisdVariant, EntryVariant, FractalMTFConfig, KillzoneMode, ReversalConfirmMode,
+            TTradesFractalMTF,
         },
     },
 };
@@ -341,6 +342,8 @@ fn run_mtf_case(
     htf_data: Arc<Vec<CandleStick>>,
     tick_size: Decimal,
     slippage_levels: &[i32],
+    cisd_name: &'static str,
+    cisd_variant: CisdVariant,
     reversal_mode: ReversalConfirmMode,
     weekday_mask: u8,
     killzone_mode: KillzoneMode,
@@ -363,6 +366,7 @@ fn run_mtf_case(
     naive_cfg.fee_config = FeeConfig::zero();
     naive_cfg.log_progress = false;
     naive_cfg.entry_variant = entry_variant;
+    naive_cfg.cisd_variant = cisd_variant;
     naive_cfg.reversal_confirm_mode = reversal_mode;
     naive_cfg.weekday_mask = weekday_mask;
     naive_cfg.killzone_mode = killzone_mode;
@@ -415,6 +419,7 @@ fn run_mtf_case(
         cfg.slippage_ticks_per_side = ticks;
         cfg.log_progress = false;
         cfg.entry_variant = entry_variant;
+        cfg.cisd_variant = cisd_variant;
         cfg.reversal_confirm_mode = reversal_mode;
         cfg.weekday_mask = weekday_mask;
         cfg.killzone_mode = killzone_mode;
@@ -450,6 +455,7 @@ fn run_mtf_case(
     wf_cfg.slippage_ticks_per_side = 0;
     wf_cfg.log_progress = false;
     wf_cfg.entry_variant = entry_variant;
+    wf_cfg.cisd_variant = cisd_variant;
     wf_cfg.reversal_confirm_mode = reversal_mode;
     wf_cfg.weekday_mask = weekday_mask;
     wf_cfg.killzone_mode = killzone_mode;
@@ -495,7 +501,7 @@ fn run_mtf_case(
         wf_test_net,
         wf_test_pf: wf_test.1.to_string(),
         validated_reality_check: "PARTIAL",
-        setup_coverage: format!("entry={:?};confirm_mode={};time_filter={};opportunity={};rr={};poi_pad_bps={};ob_tol_bps={};htf_bias+poi+cisd/ifvg+ob;slippage={:?}", entry_variant, mode_name, time_profile_name, opportunity_name, rr_target, poi_padding_bps, ob_sweep_tolerance_bps, slippage_levels),
+        setup_coverage: format!("entry={:?};cisd_variant={};confirm_mode={};time_filter={};opportunity={};rr={};poi_pad_bps={};ob_tol_bps={};htf_bias+poi+cisd/ifvg+ob;slippage={:?}", entry_variant, cisd_name, mode_name, time_profile_name, opportunity_name, rr_target, poi_padding_bps, ob_sweep_tolerance_bps, slippage_levels),
         final_verdict: verdict(base.0, base.1, base.5),
     }
 }
@@ -843,6 +849,12 @@ fn main() {
         ("cisd_and_ifvg", ReversalConfirmMode::CisdAndIfvg),
         ("cisd_or_ifvg", ReversalConfirmMode::CisdOrIfvg),
     ];
+    let cisd_variants: Vec<(&'static str, CisdVariant)> = vec![
+        ("body_flip", CisdVariant::BodyFlip),
+        ("strict_wick_break", CisdVariant::StrictWickBreak),
+        ("last_series_close_break", CisdVariant::LastSeriesCloseBreak),
+        ("failure_swing", CisdVariant::FailureSwing),
+    ];
 
     let time_profiles: Vec<(&'static str, u8, KillzoneMode)> = vec![
         ("all_day_all_week", 0b0111_1111, KillzoneMode::Off),
@@ -894,9 +906,11 @@ fn main() {
         &'static str,
         &'static str,
         &'static str,
+        &'static str,
         Arc<Vec<CandleStick>>,
         Arc<Vec<CandleStick>>,
         Decimal,
+        CisdVariant,
         ReversalConfirmMode,
         u8,
         KillzoneMode,
@@ -906,62 +920,68 @@ fn main() {
         i32,
     )> = vec![];
     for (asset, tf, ltf, htf, tick) in base_mtf_jobs {
-        for (mode_name, mode) in &reversal_modes {
-            for (time_profile_name, weekday_mask, killzone_mode) in &time_profiles {
-                mtf_jobs.push((
-                    asset,
-                    tf,
-                    *mode_name,
-                    *time_profile_name,
-                    baseline_opportunity.0,
-                    Arc::clone(&ltf),
-                    Arc::clone(&htf),
-                    tick,
-                    *mode,
-                    *weekday_mask,
-                    *killzone_mode,
-                    baseline_opportunity.1,
-                    baseline_opportunity.2,
-                    baseline_opportunity.3,
-                    baseline_opportunity.4,
-                ));
+        for (cisd_name, cisd_variant) in &cisd_variants {
+            for (mode_name, mode) in &reversal_modes {
+                for (time_profile_name, weekday_mask, killzone_mode) in &time_profiles {
+                    mtf_jobs.push((
+                        asset,
+                        tf,
+                        *mode_name,
+                        *time_profile_name,
+                        baseline_opportunity.0,
+                        *cisd_name,
+                        Arc::clone(&ltf),
+                        Arc::clone(&htf),
+                        tick,
+                        *cisd_variant,
+                        *mode,
+                        *weekday_mask,
+                        *killzone_mode,
+                        baseline_opportunity.1,
+                        baseline_opportunity.2,
+                        baseline_opportunity.3,
+                        baseline_opportunity.4,
+                    ));
 
-                let selective_target = matches!(
-                    (asset, tf),
-                    ("ETH", "5m/1h") | ("MES", "1m/15m") | ("GOLD", "1m/15m")
-                );
-                let selective_mode = matches!(*mode_name, "ifvg_only" | "cisd_and_ifvg");
-                let selective_time = matches!(
-                    *time_profile_name,
-                    "all_day_all_week" | "london_ny_weekdays"
-                );
+                    let selective_target = matches!(
+                        (asset, tf),
+                        ("ETH", "5m/1h") | ("MES", "1m/15m") | ("GOLD", "1m/15m")
+                    );
+                    let selective_mode = matches!(*mode_name, "ifvg_only" | "cisd_and_ifvg");
+                    let selective_time = matches!(
+                        *time_profile_name,
+                        "all_day_all_week" | "london_ny_weekdays"
+                    );
 
-                if selective_target && selective_mode && selective_time {
-                    for (
-                        opportunity_name,
-                        rr_target,
-                        entry_variant,
-                        poi_padding_bps,
-                        ob_sweep_tolerance_bps,
-                    ) in &selective_opportunities
-                    {
-                        mtf_jobs.push((
-                            asset,
-                            tf,
-                            *mode_name,
-                            *time_profile_name,
-                            *opportunity_name,
-                            Arc::clone(&ltf),
-                            Arc::clone(&htf),
-                            tick,
-                            *mode,
-                            *weekday_mask,
-                            *killzone_mode,
-                            *rr_target,
-                            *entry_variant,
-                            *poi_padding_bps,
-                            *ob_sweep_tolerance_bps,
-                        ));
+                    if selective_target && selective_mode && selective_time {
+                        for (
+                            opportunity_name,
+                            rr_target,
+                            entry_variant,
+                            poi_padding_bps,
+                            ob_sweep_tolerance_bps,
+                        ) in &selective_opportunities
+                        {
+                            mtf_jobs.push((
+                                asset,
+                                tf,
+                                *mode_name,
+                                *time_profile_name,
+                                *opportunity_name,
+                                *cisd_name,
+                                Arc::clone(&ltf),
+                                Arc::clone(&htf),
+                                tick,
+                                *cisd_variant,
+                                *mode,
+                                *weekday_mask,
+                                *killzone_mode,
+                                *rr_target,
+                                *entry_variant,
+                                *poi_padding_bps,
+                                *ob_sweep_tolerance_bps,
+                            ));
+                        }
                     }
                 }
             }
@@ -984,9 +1004,11 @@ fn main() {
                 mode_name,
                 time_profile_name,
                 opportunity_name,
+                cisd_name,
                 ltf,
                 htf,
                 tick,
+                cisd_variant,
                 mode,
                 weekday_mask,
                 killzone_mode,
@@ -1005,6 +1027,8 @@ fn main() {
                     Arc::clone(htf),
                     *tick,
                     &slippage_levels,
+                    *cisd_name,
+                    *cisd_variant,
                     *mode,
                     *weekday_mask,
                     *killzone_mode,

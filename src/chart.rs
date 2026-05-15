@@ -1,9 +1,8 @@
 extern crate rust_decimal;
 
+use charming::datatype::NumericValue;
 use charming::{
-    component::{
-        Axis, DataZoom, DataZoomType, Feature, Grid, Legend, Toolbox, ToolboxDataZoom,
-    },
+    component::{Axis, DataZoom, DataZoomType, Feature, Grid, Legend, Toolbox, ToolboxDataZoom},
     element::{
         AxisLine, AxisPointer, AxisPointerLink, AxisPointerType, AxisType, SplitArea, SplitLine,
         Tooltip, Trigger,
@@ -11,7 +10,6 @@ use charming::{
     series::{Candlestick, Scatter},
     Chart,
 };
-use charming::datatype::NumericValue;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 
 use crate::{
@@ -20,16 +18,14 @@ use crate::{
     model::{candle_stick::CandleStick, trade::Trade},
     strategies::mc::{
         EntryMode, ExecutionConfig, FvgConfig, LevelFilters, MarketEntryMode, MaxSlMode, Mc,
-        McConfig, McMode, SignalPattern, SignalQualityConfig, TimeWindow, TrailingStopConfig,
-        TrendFilter,
+        McConfig, McMode, SignalPattern, SignalQualityConfig, TakeProfitMode, TimeWindow,
+        TrailingStopConfig, TrendFilter,
     },
     to_new_york_time,
 };
 
 fn load_binance() -> Vec<CandleStick> {
-    CandleStickLoader::load_binance(include_str!(
-        "../assets/binance_BTCUSDT_15m.json"
-    ))
+    CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_15m.json"))
 }
 
 fn recent_candles(candles: &[CandleStick], days: i64) -> Vec<CandleStick> {
@@ -57,12 +53,16 @@ fn mc_trades(data: Vec<CandleStick>) -> Vec<Trade> {
         mode: McMode::ContinuationEma200,
         entry_mode: EntryMode::PrevOpen,
         rr_target: rust_decimal::Decimal::from_f32(1.5).unwrap(),
+        take_profit_mode: TakeProfitMode::RMultiple,
         trade_window: Some(TimeWindow::default()),
         level_filters: LevelFilters {
             enabled: false,
             ..LevelFilters::default()
         },
-        trend_filter: TrendFilter::Ema { fast: 50, slow: 200 },
+        trend_filter: TrendFilter::Ema {
+            fast: 50,
+            slow: 200,
+        },
         fvg_filter: FvgConfig {
             enabled: false,
             ..FvgConfig::default()
@@ -145,10 +145,8 @@ pub fn chart() -> Chart {
         )
         .axis_pointer(AxisPointer::new().link(vec![AxisPointerLink::new().x_axis_index("all")]))
         .toolbox(
-            Toolbox::new().feature(
-                Feature::new()
-                    .data_zoom(ToolboxDataZoom::new().y_axis_index("none")),
-            ),
+            Toolbox::new()
+                .feature(Feature::new().data_zoom(ToolboxDataZoom::new().y_axis_index("none"))),
         )
         .grid(Grid::new().left("10%").right("8%").bottom(120))
         .x_axis(

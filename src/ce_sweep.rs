@@ -91,14 +91,21 @@ fn parse_args() -> Args {
     }
 }
 
-fn rolling_fold_slices(data: &[CandleStick], folds: usize) -> Vec<(Vec<CandleStick>, Vec<CandleStick>)> {
+fn rolling_fold_slices(
+    data: &[CandleStick],
+    folds: usize,
+) -> Vec<(Vec<CandleStick>, Vec<CandleStick>)> {
     let f = folds.max(3);
     let n = data.len();
     let seg = (n / f).max(1);
     let mut out = Vec::new();
     for i in 1..f {
         let test_start = i * seg;
-        let test_end = if i == f - 1 { n } else { ((i + 1) * seg).min(n) };
+        let test_end = if i == f - 1 {
+            n
+        } else {
+            ((i + 1) * seg).min(n)
+        };
         if test_start >= n || test_end <= test_start {
             continue;
         }
@@ -148,10 +155,26 @@ fn main() {
         cfg.trade_power_hour = false;
         cases.push(("london_only_s8_rr2.5/1.2_w3_h48_t1_v1_q0".to_string(), cfg));
     }
-    let swing_points = if args.research_london { vec![6, 8, 10] } else { vec![8, 10] };
-    let rr_aligned = if args.research_london { vec![18, 20, 22, 25] } else { vec![20, 22, 25] };
-    let rr_counter = if args.research_london { vec![10, 12, 15] } else { vec![12, 15] };
-    let max_waits = if args.research_london { vec![2usize, 3usize, 5usize] } else { vec![3usize, 5usize] };
+    let swing_points = if args.research_london {
+        vec![6, 8, 10]
+    } else {
+        vec![8, 10]
+    };
+    let rr_aligned = if args.research_london {
+        vec![18, 20, 22, 25]
+    } else {
+        vec![20, 22, 25]
+    };
+    let rr_counter = if args.research_london {
+        vec![10, 12, 15]
+    } else {
+        vec![12, 15]
+    };
+    let max_waits = if args.research_london {
+        vec![2usize, 3usize, 5usize]
+    } else {
+        vec![3usize, 5usize]
+    };
     let max_holds = if args.research_london {
         vec![12usize, 18usize, 24usize, 36usize, 48usize, 60usize]
     } else {
@@ -159,8 +182,16 @@ fn main() {
     };
     let trend_filters = vec![true];
     let vol_filters = vec![true];
-    let impulse_filters = if args.research_london { vec![true, false] } else { vec![true, false] };
-    let rejection_filters = if args.research_london { vec![true, false] } else { vec![false] };
+    let impulse_filters = if args.research_london {
+        vec![true, false]
+    } else {
+        vec![true, false]
+    };
+    let rejection_filters = if args.research_london {
+        vec![true, false]
+    } else {
+        vec![false]
+    };
     let session_profiles = if args.research_london {
         vec![
             (true, false, false, false, "london_only"),
@@ -187,41 +218,48 @@ fn main() {
                                 for qf in &impulse_filters {
                                     for rf in &rejection_filters {
                                         for (lon, nyam, nymid, ph, sname) in &session_profiles {
-                                        let mut cfg = CeConfig::default();
-                                        cfg.min_swing_points = min_swing.into();
-                                        cfg.rr_trend_aligned = rust_decimal::Decimal::new(*ra, 1);
-                                        cfg.rr_counter_trend = rust_decimal::Decimal::new(*rc, 1);
-                                        cfg.max_wait_bars = *mw;
-                                        cfg.max_hold_bars = *mh;
-                                        cfg.use_trend_filter = *tf;
-                                        cfg.use_vol_filter = *vf;
-                                        cfg.require_impulse_move = *qf;
-                                        cfg.require_rejection_confirm = *rf;
-                                        cfg.trade_london_open = *lon;
-                                        cfg.trade_ny_am = *nyam;
-                                        cfg.trade_ny_mid = *nymid;
-                                        cfg.trade_power_hour = *ph;
-                                        cfg.commission_round_trip_usd =
-                                            cfg.commission_round_trip_usd * rust_decimal::Decimal::new(args.commission_mult, 2);
-                                        cfg.slippage_round_trip_usd =
-                                            cfg.slippage_round_trip_usd * rust_decimal::Decimal::new(args.slippage_mult, 2);
-                                        let name = format!(
-                                            "{}_s{}_rr{:.1}/{:.1}_w{}_h{}_t{}_v{}_q{}_r{}",
-                                            sname,
-                                            min_swing,
-                                            (*ra as f64) / 10.0,
-                                            (*rc as f64) / 10.0,
-                                            *mw,
-                                            *mh,
-                                            if *tf { 1 } else { 0 },
-                                            if *vf { 1 } else { 0 },
-                                            if *qf { 1 } else { 0 },
-                                            if *rf { 1 } else { 0 }
-                                        );
-                                        if !args.single_best {
-                                            cases.push((name, cfg));
+                                            let mut cfg = CeConfig::default();
+                                            cfg.min_swing_points = min_swing.into();
+                                            cfg.rr_trend_aligned =
+                                                rust_decimal::Decimal::new(*ra, 1);
+                                            cfg.rr_counter_trend =
+                                                rust_decimal::Decimal::new(*rc, 1);
+                                            cfg.max_wait_bars = *mw;
+                                            cfg.max_hold_bars = *mh;
+                                            cfg.use_trend_filter = *tf;
+                                            cfg.use_vol_filter = *vf;
+                                            cfg.require_impulse_move = *qf;
+                                            cfg.require_rejection_confirm = *rf;
+                                            cfg.trade_london_open = *lon;
+                                            cfg.trade_ny_am = *nyam;
+                                            cfg.trade_ny_mid = *nymid;
+                                            cfg.trade_power_hour = *ph;
+                                            cfg.commission_round_trip_usd = cfg
+                                                .commission_round_trip_usd
+                                                * rust_decimal::Decimal::new(
+                                                    args.commission_mult,
+                                                    2,
+                                                );
+                                            cfg.slippage_round_trip_usd = cfg
+                                                .slippage_round_trip_usd
+                                                * rust_decimal::Decimal::new(args.slippage_mult, 2);
+                                            let name = format!(
+                                                "{}_s{}_rr{:.1}/{:.1}_w{}_h{}_t{}_v{}_q{}_r{}",
+                                                sname,
+                                                min_swing,
+                                                (*ra as f64) / 10.0,
+                                                (*rc as f64) / 10.0,
+                                                *mw,
+                                                *mh,
+                                                if *tf { 1 } else { 0 },
+                                                if *vf { 1 } else { 0 },
+                                                if *qf { 1 } else { 0 },
+                                                if *rf { 1 } else { 0 }
+                                            );
+                                            if !args.single_best {
+                                                cases.push((name, cfg));
+                                            }
                                         }
-                                    }
                                     }
                                 }
                             }
