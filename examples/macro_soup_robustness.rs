@@ -7,8 +7,9 @@ use backtest::{
         candle_stick::CandleStick, decimal::DecimalVec, session::Session, sl_trategy::SlStrategy,
         trade_result::TradeResult, trading_model::TradingModel,
     },
-    parse_datetime, to_new_york_time,
+    parse_datetime,
     strategies::macro_soup::MacroSoup,
+    to_new_york_time,
 };
 use chrono::Datelike;
 use rust_decimal::Decimal;
@@ -35,7 +36,10 @@ fn load_binance() -> Vec<CandleStick> {
     CandleStickLoader::load_binance(include_str!("../assets/binance_BTCUSDT_15m.json"))
 }
 
-fn month_stats(trades: &[backtest::model::trade::Trade], qty_btc: Decimal) -> (Decimal, usize, usize, Decimal) {
+fn month_stats(
+    trades: &[backtest::model::trade::Trade],
+    qty_btc: Decimal,
+) -> (Decimal, usize, usize, Decimal) {
     let mut by_month: BTreeMap<String, Decimal> = BTreeMap::new();
     for t in trades {
         let dt = to_new_york_time(t.close_time);
@@ -87,7 +91,9 @@ fn main() {
     for slip in slippages {
         for fee_mult in fee_mults {
             for start_hm in top_windows {
-                let start = parse_datetime(&format!("2022-09-30 {}:00", start_hm)).unwrap().time();
+                let start = parse_datetime(&format!("2022-09-30 {}:00", start_hm))
+                    .unwrap()
+                    .time();
                 let session_end = start + chrono::Duration::minutes(60);
                 let model = MacroSoup {
                     candles: candles.clone(),
@@ -114,7 +120,8 @@ fn main() {
                 let win_rate = if trades == 0 {
                     Decimal::ZERO
                 } else {
-                    Decimal::from(winners as u32) / Decimal::from(trades as u32) * Decimal::new(100, 0)
+                    Decimal::from(winners as u32) / Decimal::from(trades as u32)
+                        * Decimal::new(100, 0)
                 };
 
                 let gross_loss_r = Decimal::from(losers as u32);
@@ -127,7 +134,8 @@ fn main() {
                     Decimal::ZERO
                 };
 
-                let (total_usd, pos_months, months, max_monthly_dd) = month_stats(&result.trades, qty_btc);
+                let (total_usd, pos_months, months, max_monthly_dd) =
+                    month_stats(&result.trades, qty_btc);
 
                 let avg_trades_per_month = if months == 0 {
                     Decimal::ZERO
@@ -179,7 +187,6 @@ fn main() {
                     status,
                     fail_reason,
                 });
-
             }
         }
     }
@@ -191,7 +198,11 @@ fn main() {
             .then(b.profit_r.cmp(&a.profit_r))
     });
 
-    let mut pass_rows: Vec<Candidate> = rows.iter().filter(|x| x.status == "PASS").cloned().collect();
+    let mut pass_rows: Vec<Candidate> = rows
+        .iter()
+        .filter(|x| x.status == "PASS")
+        .cloned()
+        .collect();
     pass_rows.sort_by(|a, b| b.total_usd_0p1.cmp(&a.total_usd_0p1));
 
     let mut deduped: Vec<Candidate> = Vec::new();
@@ -219,7 +230,10 @@ fn main() {
     let total = rows.len();
     let pass_count = rows.iter().filter(|x| x.status == "PASS").count();
     md.push_str("- Stress shortlist: top 3 windows from MACRO_SOUP_REALISM_REPORT.md\n");
-    md.push_str(&format!("- Tested stress rows: {}\n- Pass rows: {}\n\n", total, pass_count));
+    md.push_str(&format!(
+        "- Tested stress rows: {}\n- Pass rows: {}\n\n",
+        total, pass_count
+    ));
 
     md.push_str("## Top PASS (deduped)\n\n");
     md.push_str("| rank | start | end | slip | fee_mult | trades | win_rate_% | pf_r | profit_r | total_usd_0p1 | pos_months | months | max_monthly_dd |\n");
@@ -259,11 +273,8 @@ fn main() {
         ));
     }
 
-    std::fs::write(
-        "reports/strategy_overviews/MACRO_SOUP_ROBUSTNESS.md",
-        md,
-    )
-    .unwrap_or_else(|e| panic!("failed writing report: {}", e));
+    std::fs::write("reports/strategy_overviews/MACRO_SOUP_ROBUSTNESS.md", md)
+        .unwrap_or_else(|e| panic!("failed writing report: {}", e));
 
     println!("Wrote reports/strategy_overviews/MACRO_SOUP_ROBUSTNESS.md");
 }

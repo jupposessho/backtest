@@ -80,26 +80,53 @@ fn resample_5m(v: &[B1]) -> Vec<B1> {
             lo = lo.min(b.lo);
         }
         let dt = New_York.timestamp_opt(bucket, 0).single().expect("ts");
-        out.push(B1 { ts: bucket, h: dt.hour(), o: s[0].o, hi, lo, c: s[s.len() - 1].c });
+        out.push(B1 {
+            ts: bucket,
+            h: dt.hour(),
+            o: s[0].o,
+            hi,
+            lo,
+            c: s[s.len() - 1].c,
+        });
         i = j;
     }
     out
 }
 
 fn collect_days() -> Vec<Day> {
-    let data = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet")).expect("load");
+    let data =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("load");
     let mut all = Vec::new();
     for c in data {
         let dt = New_York.timestamp_opt(c.open_time, 0).single().expect("ts");
-        all.push(B1 { ts: c.open_time, h: dt.hour(), o: d2f(c.open.0), hi: d2f(c.high.0), lo: d2f(c.low.0), c: d2f(c.close.0) });
+        all.push(B1 {
+            ts: c.open_time,
+            h: dt.hour(),
+            o: d2f(c.open.0),
+            hi: d2f(c.high.0),
+            lo: d2f(c.low.0),
+            c: d2f(c.close.0),
+        });
     }
 
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < all.len() {
-        let d = New_York.timestamp_opt(all[i].ts, 0).single().expect("ts").date_naive();
+        let d = New_York
+            .timestamp_opt(all[i].ts, 0)
+            .single()
+            .expect("ts")
+            .date_naive();
         let mut j = i;
-        while j < all.len() && New_York.timestamp_opt(all[j].ts, 0).single().expect("ts").date_naive() == d {
+        while j < all.len()
+            && New_York
+                .timestamp_opt(all[j].ts, 0)
+                .single()
+                .expect("ts")
+                .date_naive()
+                == d
+        {
             j += 1;
         }
         let bars = all[i..j].to_vec();
@@ -114,7 +141,11 @@ fn collect_days() -> Vec<Day> {
             }
         }
         if has && rh > rl {
-            out.push(Day { bars, range_hi: rh, range_lo: rl });
+            out.push(Day {
+                bars,
+                range_hi: rh,
+                range_lo: rl,
+            });
         }
         i = j;
     }
@@ -122,20 +153,30 @@ fn collect_days() -> Vec<Day> {
 }
 
 fn find_mss_5m(v5: &[B1], side: Side, start: usize, min_disp: f64) -> Option<usize> {
-    if v5.len() < 4 { return None; }
+    if v5.len() < 4 {
+        return None;
+    }
     let mut pivot = None;
     for i in (start + 1)..(v5.len() - 1) {
         let body = (v5[i].c - v5[i].o).abs();
         let range = (v5[i].hi - v5[i].lo).max(0.0001);
         if side == Side::Short {
-            if v5[i].lo < v5[i - 1].lo && v5[i].lo < v5[i + 1].lo { pivot = Some(v5[i].lo); }
+            if v5[i].lo < v5[i - 1].lo && v5[i].lo < v5[i + 1].lo {
+                pivot = Some(v5[i].lo);
+            }
             if let Some(p) = pivot {
-                if v5[i].c < p && body / range >= min_disp { return Some(i); }
+                if v5[i].c < p && body / range >= min_disp {
+                    return Some(i);
+                }
             }
         } else {
-            if v5[i].hi > v5[i - 1].hi && v5[i].hi > v5[i + 1].hi { pivot = Some(v5[i].hi); }
+            if v5[i].hi > v5[i - 1].hi && v5[i].hi > v5[i + 1].hi {
+                pivot = Some(v5[i].hi);
+            }
             if let Some(p) = pivot {
-                if v5[i].c > p && body / range >= min_disp { return Some(i); }
+                if v5[i].c > p && body / range >= min_disp {
+                    return Some(i);
+                }
             }
         }
     }
@@ -146,9 +187,17 @@ fn ict_signal(day: &Day, min_disp: f64, max_ifvg_pct: f64, entry_deadline: u32) 
     let range = day.range_hi - day.range_lo;
     let mut sweep = None;
     for (k, b) in day.bars.iter().enumerate() {
-        if b.h < 9 { continue; }
-        if b.hi >= day.range_hi { sweep = Some((k, Side::Short)); break; }
-        if b.lo <= day.range_lo { sweep = Some((k, Side::Long)); break; }
+        if b.h < 9 {
+            continue;
+        }
+        if b.hi >= day.range_hi {
+            sweep = Some((k, Side::Short));
+            break;
+        }
+        if b.lo <= day.range_lo {
+            sweep = Some((k, Side::Long));
+            break;
+        }
     }
     let (sidx, side) = sweep?;
     let d5 = resample_5m(&day.bars);
@@ -165,70 +214,121 @@ fn ict_signal(day: &Day, min_disp: f64, max_ifvg_pct: f64, entry_deadline: u32) 
         if side == Side::Short {
             let upper = day.bars[k - 2].lo;
             let lower = day.bars[k].hi;
-            if upper <= lower { continue; }
-            if (upper - lower) / range * 100.0 > max_ifvg_pct { continue; }
+            if upper <= lower {
+                continue;
+            }
+            if (upper - lower) / range * 100.0 > max_ifvg_pct {
+                continue;
+            }
             let mid = lower + (upper - lower) * 0.5;
             let mut mit = None;
             for (m, b) in day.bars.iter().enumerate().skip(k + 1) {
-                if b.hi >= mid { mit = Some(m); break; }
+                if b.hi >= mid {
+                    mit = Some(m);
+                    break;
+                }
             }
             if let Some(m) = mit {
                 let mut ob = None;
                 for t in (start1..=k).rev() {
-                    if day.bars[t].c > day.bars[t].o { ob = Some(t); break; }
+                    if day.bars[t].c > day.bars[t].o {
+                        ob = Some(t);
+                        break;
+                    }
                 }
                 let o = ob?;
                 ob_hi = day.bars[o].hi;
                 ob_lo = day.bars[o].lo;
                 let mut invalid = false;
                 for b in day.bars.iter().skip(o + 1).take(m.saturating_sub(o + 1)) {
-                    if b.c > ob_hi { invalid = true; break; }
+                    if b.c > ob_hi {
+                        invalid = true;
+                        break;
+                    }
                 }
-                if invalid { continue; }
+                if invalid {
+                    continue;
+                }
                 for (e, b) in day.bars.iter().enumerate().skip(m) {
-                    if b.h > entry_deadline { break; }
-                    if b.hi >= ob_lo && b.lo <= ob_hi { entry_idx = Some(e + 1); break; }
+                    if b.h > entry_deadline {
+                        break;
+                    }
+                    if b.hi >= ob_lo && b.lo <= ob_hi {
+                        entry_idx = Some(e + 1);
+                        break;
+                    }
                 }
             }
         } else {
             let lower = day.bars[k - 2].hi;
             let upper = day.bars[k].lo;
-            if lower >= upper { continue; }
-            if (upper - lower) / range * 100.0 > max_ifvg_pct { continue; }
+            if lower >= upper {
+                continue;
+            }
+            if (upper - lower) / range * 100.0 > max_ifvg_pct {
+                continue;
+            }
             let mid = upper - (upper - lower) * 0.5;
             let mut mit = None;
             for (m, b) in day.bars.iter().enumerate().skip(k + 1) {
-                if b.lo <= mid { mit = Some(m); break; }
+                if b.lo <= mid {
+                    mit = Some(m);
+                    break;
+                }
             }
             if let Some(m) = mit {
                 let mut ob = None;
                 for t in (start1..=k).rev() {
-                    if day.bars[t].c < day.bars[t].o { ob = Some(t); break; }
+                    if day.bars[t].c < day.bars[t].o {
+                        ob = Some(t);
+                        break;
+                    }
                 }
                 let o = ob?;
                 ob_hi = day.bars[o].hi;
                 ob_lo = day.bars[o].lo;
                 let mut invalid = false;
                 for b in day.bars.iter().skip(o + 1).take(m.saturating_sub(o + 1)) {
-                    if b.c < ob_lo { invalid = true; break; }
+                    if b.c < ob_lo {
+                        invalid = true;
+                        break;
+                    }
                 }
-                if invalid { continue; }
+                if invalid {
+                    continue;
+                }
                 for (e, b) in day.bars.iter().enumerate().skip(m) {
-                    if b.h > entry_deadline { break; }
-                    if b.hi >= ob_lo && b.lo <= ob_hi { entry_idx = Some(e + 1); break; }
+                    if b.h > entry_deadline {
+                        break;
+                    }
+                    if b.hi >= ob_lo && b.lo <= ob_hi {
+                        entry_idx = Some(e + 1);
+                        break;
+                    }
                 }
             }
         }
-        if entry_idx.is_some() { break; }
+        if entry_idx.is_some() {
+            break;
+        }
     }
 
     let eidx = entry_idx?;
-    if eidx >= day.bars.len() { return None; }
-    Some(Signal { side, entry_idx: eidx, ob_hi, ob_lo })
+    if eidx >= day.bars.len() {
+        return None;
+    }
+    Some(Signal {
+        side,
+        entry_idx: eidx,
+        ob_hi,
+        ob_lo,
+    })
 }
 
 fn ema_gate_pass(day: &Day, s: Signal, gate: EmaGate, ema_p: usize) -> bool {
-    if matches!(gate, EmaGate::None) { return true; }
+    if matches!(gate, EmaGate::None) {
+        return true;
+    }
     let closes1: Vec<f64> = day.bars.iter().map(|b| b.c).collect();
     let ema1 = ema(&closes1, ema_p);
     let ok_entry = match s.side {
@@ -236,13 +336,18 @@ fn ema_gate_pass(day: &Day, s: Signal, gate: EmaGate, ema_p: usize) -> bool {
         Side::Long => day.bars[s.entry_idx].c >= ema1[s.entry_idx],
     };
 
-    if matches!(gate, EmaGate::Entry1m) { return ok_entry; }
+    if matches!(gate, EmaGate::Entry1m) {
+        return ok_entry;
+    }
 
     let d5 = resample_5m(&day.bars);
     let closes5: Vec<f64> = d5.iter().map(|b| b.c).collect();
     let ema5 = ema(&closes5, ema_p);
     let t = day.bars[s.entry_idx].ts;
-    let idx5 = d5.iter().position(|b| b.ts >= t).unwrap_or(d5.len().saturating_sub(1));
+    let idx5 = d5
+        .iter()
+        .position(|b| b.ts >= t)
+        .unwrap_or(d5.len().saturating_sub(1));
     let ok_trend = match s.side {
         Side::Short => d5[idx5].c <= ema5[idx5],
         Side::Long => d5[idx5].c >= ema5[idx5],
@@ -260,28 +365,72 @@ fn execute(day: &Day, s: Signal, stop_cap_pct: f64, tstop: u32) -> Option<(f64, 
     let slip = tick;
     let comm_rt_pts = 0.5;
     let range = day.range_hi - day.range_lo;
-    let entry = if s.side == Side::Short { day.bars[s.entry_idx].o - slip } else { day.bars[s.entry_idx].o + slip };
-    let stop_struct = if s.side == Side::Short { s.ob_hi + tick + slip } else { s.ob_lo - tick - slip };
-    let stop_cap = if s.side == Side::Short { entry + stop_cap_pct * range } else { entry - stop_cap_pct * range };
-    let stop = if s.side == Side::Short { stop_struct.min(stop_cap) } else { stop_struct.max(stop_cap) };
+    let entry = if s.side == Side::Short {
+        day.bars[s.entry_idx].o - slip
+    } else {
+        day.bars[s.entry_idx].o + slip
+    };
+    let stop_struct = if s.side == Side::Short {
+        s.ob_hi + tick + slip
+    } else {
+        s.ob_lo - tick - slip
+    };
+    let stop_cap = if s.side == Side::Short {
+        entry + stop_cap_pct * range
+    } else {
+        entry - stop_cap_pct * range
+    };
+    let stop = if s.side == Side::Short {
+        stop_struct.min(stop_cap)
+    } else {
+        stop_struct.max(stop_cap)
+    };
     let risk = (entry - stop).abs();
-    if risk < tick { return None; }
+    if risk < tick {
+        return None;
+    }
 
-    let tp1 = if s.side == Side::Short { entry - risk } else { entry + risk };
-    let tp2 = if s.side == Side::Short { day.range_lo + slip } else { day.range_hi - slip };
+    let tp1 = if s.side == Side::Short {
+        entry - risk
+    } else {
+        entry + risk
+    };
+    let tp2 = if s.side == Side::Short {
+        day.range_lo + slip
+    } else {
+        day.range_hi - slip
+    };
     let cost_r = comm_rt_pts / risk;
     let mut got_tp1 = false;
 
     for b in day.bars.iter().skip(s.entry_idx) {
-        if b.h >= tstop { return Some((if got_tp1 { 0.4 - cost_r } else { -0.1 - cost_r }, false)); }
-        let stop_hit = if s.side == Side::Short { b.hi >= stop } else { b.lo <= stop };
-        if stop_hit { return Some((if got_tp1 { 0.5 - cost_r } else { -1.0 - cost_r }, false)); }
+        if b.h >= tstop {
+            return Some((if got_tp1 { 0.4 - cost_r } else { -0.1 - cost_r }, false));
+        }
+        let stop_hit = if s.side == Side::Short {
+            b.hi >= stop
+        } else {
+            b.lo <= stop
+        };
+        if stop_hit {
+            return Some((if got_tp1 { 0.5 - cost_r } else { -1.0 - cost_r }, false));
+        }
         if !got_tp1 {
-            let hit1 = if s.side == Side::Short { b.lo <= tp1 } else { b.hi >= tp1 };
-            if hit1 { got_tp1 = true; }
+            let hit1 = if s.side == Side::Short {
+                b.lo <= tp1
+            } else {
+                b.hi >= tp1
+            };
+            if hit1 {
+                got_tp1 = true;
+            }
         }
         if got_tp1 {
-            let hit2 = if s.side == Side::Short { b.lo <= tp2 } else { b.hi >= tp2 };
+            let hit2 = if s.side == Side::Short {
+                b.lo <= tp2
+            } else {
+                b.hi >= tp2
+            };
             if hit2 {
                 let rr2 = (tp2 - entry).abs() / risk;
                 return Some((0.5 + 0.5 * rr2 - cost_r, true));
@@ -297,7 +446,12 @@ fn main() {
     let train = &days[..split];
     let test = &days[split..];
 
-    let gates = [EmaGate::None, EmaGate::Trend5m, EmaGate::Entry1m, EmaGate::Both];
+    let gates = [
+        EmaGate::None,
+        EmaGate::Trend5m,
+        EmaGate::Entry1m,
+        EmaGate::Both,
+    ];
     let ema_ps = [20_usize, 50, 100];
     let stop_caps = [0.2_f64, 0.25, 0.3];
     let tstop = [11_u32, 12_u32];
@@ -324,7 +478,9 @@ fn main() {
                             }
                         }
                     }
-                    if tr_n < 80 { continue; }
+                    if tr_n < 80 {
+                        continue;
+                    }
                     let tr_wr = tr_w as f64 / tr_n as f64 * 100.0;
                     let tr_exp = tr_sum / tr_n as f64;
 
@@ -344,7 +500,9 @@ fn main() {
                             }
                         }
                     }
-                    if te_n < 25 { continue; }
+                    if te_n < 25 {
+                        continue;
+                    }
                     let te_wr = te_w as f64 / te_n as f64 * 100.0;
                     let te_exp = te_sum / te_n as f64;
                     let gname = match g {
@@ -354,7 +512,13 @@ fn main() {
                         EmaGate::Both => "both",
                     };
                     rows.push((
-                        format!("gate={} ema={} stop_cap={:.0}% tstop={}", gname, ep, sc * 100.0, ts),
+                        format!(
+                            "gate={} ema={} stop_cap={:.0}% tstop={}",
+                            gname,
+                            ep,
+                            sc * 100.0,
+                            ts
+                        ),
                         tr_n,
                         tr_wr,
                         tr_exp,
@@ -367,7 +531,11 @@ fn main() {
         }
     }
 
-    rows.sort_by(|a, b| b.6.total_cmp(&a.6).then(b.3.total_cmp(&a.3)).then(b.4.cmp(&a.4)));
+    rows.sort_by(|a, b| {
+        b.6.total_cmp(&a.6)
+            .then(b.3.total_cmp(&a.3))
+            .then(b.4.cmp(&a.4))
+    });
     println!("MNQ reversal + EMA combo (ICT core: MSS5+iFVG1+OB1)");
     println!("Top configs by OOS expectancy (70/30 split):");
     for r in rows.iter().take(20) {

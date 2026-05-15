@@ -184,7 +184,11 @@ fn run_day(day: &Day, cfg: Cfg) -> Option<f64> {
     } else {
         day.rh + cfg.stop_mult * day.r + slip
     };
-    let target = if side == Side::Long { p2 - slip } else { n2 + slip };
+    let target = if side == Side::Long {
+        p2 - slip
+    } else {
+        n2 + slip
+    };
 
     let risk = (entry - stop).abs();
     if risk < tick {
@@ -233,7 +237,11 @@ fn eval(days: &[Day], cfg: Cfg) -> (usize, f64, f64) {
             sum += r;
         }
     }
-    let wr = if n > 0 { w as f64 / n as f64 * 100.0 } else { 0.0 };
+    let wr = if n > 0 {
+        w as f64 / n as f64 * 100.0
+    } else {
+        0.0
+    };
     let exp = if n > 0 { sum / n as f64 } else { 0.0 };
     (n, wr, exp)
 }
@@ -295,7 +303,11 @@ fn main() {
         }
     }
 
-    rows.sort_by(|a, b| b.6.total_cmp(&a.6).then(b.4.cmp(&a.4)).then(b.5.total_cmp(&a.5)));
+    rows.sort_by(|a, b| {
+        b.6.total_cmp(&a.6)
+            .then(b.4.cmp(&a.4))
+            .then(b.5.total_cmp(&a.5))
+    });
 
     println!("MNQ 9:00-9:15 transition strategy sweep");
     println!("Patterns covered: -1 -> +1 / +2.25 and +1 -> -1 / -2.25 (mirrored)");

@@ -72,7 +72,9 @@ fn run_scan(timeframe: &str, candles: &[CandleStick]) -> Vec<Row> {
 
     let mut rows = Vec::new();
     for hm in top_windows {
-        let start = parse_datetime(&format!("2022-09-30 {}:00", hm)).unwrap().time();
+        let start = parse_datetime(&format!("2022-09-30 {}:00", hm))
+            .unwrap()
+            .time();
         let session_end = start + chrono::Duration::minutes(60);
         let model = MacroSoup {
             candles: candles.to_vec(),
@@ -187,11 +189,8 @@ fn main() {
         ));
     }
 
-    std::fs::write(
-        "reports/strategy_overviews/MACRO_SOUP_MNQ_1M_3M.md",
-        md,
-    )
-    .unwrap_or_else(|e| panic!("failed writing report: {}", e));
+    std::fs::write("reports/strategy_overviews/MACRO_SOUP_MNQ_1M_3M.md", md)
+        .unwrap_or_else(|e| panic!("failed writing report: {}", e));
 
     println!("Wrote reports/strategy_overviews/MACRO_SOUP_MNQ_1M_3M.md");
 }

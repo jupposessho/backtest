@@ -89,7 +89,12 @@ fn main() {
             }
         }
 
-        let p0 = if let Some(v) = post_start { v } else { i = j; continue };
+        let p0 = if let Some(v) = post_start {
+            v
+        } else {
+            i = j;
+            continue;
+        };
         if !has_range || rh <= rl {
             i = j;
             continue;
@@ -218,10 +223,7 @@ fn main() {
         println!("\nZone {}", z.name);
         println!(
             "- top first-touch reversals: EOD={} ({:.2}%), by 12:00={} ({:.2}%)",
-            s.top_reversals_to_opposite,
-            top_rate,
-            s.top_reversals_to_opposite_by_12,
-            top_rate_12
+            s.top_reversals_to_opposite, top_rate, s.top_reversals_to_opposite_by_12, top_rate_12
         );
         println!(
             "- bottom first-touch reversals: EOD={} ({:.2}%), by 12:00={} ({:.2}%)",

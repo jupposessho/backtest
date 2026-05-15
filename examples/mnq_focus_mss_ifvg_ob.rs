@@ -42,7 +42,14 @@ fn resample_5m(v: &[B1]) -> Vec<B1> {
             lo = lo.min(b.lo);
         }
         let dt = New_York.timestamp_opt(bucket, 0).single().expect("ts");
-        out.push(B1 { ts: bucket, h: dt.hour(), o: s[0].o, hi, lo, c: s[s.len() - 1].c });
+        out.push(B1 {
+            ts: bucket,
+            h: dt.hour(),
+            o: s[0].o,
+            hi,
+            lo,
+            c: s[s.len() - 1].c,
+        });
         i = j;
     }
     out
@@ -310,7 +317,11 @@ fn run_cfg(days: &[Vec<B1>], cfg: Cfg) -> (usize, usize, f64) {
         } else {
             entry + risk
         };
-        let tp2 = if side == Side::Short { rl + slip } else { rh - slip };
+        let tp2 = if side == Side::Short {
+            rl + slip
+        } else {
+            rh - slip
+        };
         let cost_r = comm_rt_pts / risk;
 
         let mut got_tp1 = false;
@@ -362,23 +373,51 @@ fn run_cfg(days: &[Vec<B1>], cfg: Cfg) -> (usize, usize, f64) {
         trades += 1;
     }
 
-    (trades, wins, if trades > 0 { sum_r / trades as f64 } else { 0.0 })
+    (
+        trades,
+        wins,
+        if trades > 0 {
+            sum_r / trades as f64
+        } else {
+            0.0
+        },
+    )
 }
 
 fn main() {
-    let data = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet")).expect("load");
+    let data =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("load");
     let mut bars = Vec::new();
     for c in data {
         let dt = New_York.timestamp_opt(c.open_time, 0).single().expect("ts");
-        bars.push(B1 { ts: c.open_time, h: dt.hour(), o: d2f(c.open.0), hi: d2f(c.high.0), lo: d2f(c.low.0), c: d2f(c.close.0) });
+        bars.push(B1 {
+            ts: c.open_time,
+            h: dt.hour(),
+            o: d2f(c.open.0),
+            hi: d2f(c.high.0),
+            lo: d2f(c.low.0),
+            c: d2f(c.close.0),
+        });
     }
 
     let mut days: Vec<Vec<B1>> = Vec::new();
     let mut i = 0usize;
     while i < bars.len() {
-        let d = New_York.timestamp_opt(bars[i].ts, 0).single().expect("ts").date_naive();
+        let d = New_York
+            .timestamp_opt(bars[i].ts, 0)
+            .single()
+            .expect("ts")
+            .date_naive();
         let mut j = i;
-        while j < bars.len() && New_York.timestamp_opt(bars[j].ts, 0).single().expect("ts").date_naive() == d {
+        while j < bars.len()
+            && New_York
+                .timestamp_opt(bars[j].ts, 0)
+                .single()
+                .expect("ts")
+                .date_naive()
+                == d
+        {
             j += 1;
         }
         days.push(bars[i..j].to_vec());
@@ -436,6 +475,9 @@ fn main() {
     rows.sort_by(|a, b| b.3.total_cmp(&a.3).then(b.2.total_cmp(&a.2)));
     println!("MNQ focused sweep: MSS(5m)+iFVG mitigation(1m)+OB retest");
     for r in rows.iter().take(20) {
-        println!("- {} | trades={} win_rate={:.2}% exp={:.3}R", r.0, r.1, r.2, r.3);
+        println!(
+            "- {} | trades={} win_rate={:.2}% exp={:.3}R",
+            r.0, r.1, r.2, r.3
+        );
     }
 }

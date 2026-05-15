@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
 
+use backtest::model::trading_model::TradingModel;
 use backtest::{
     candle_stick_loader::CandleStickLoader,
     engine::types::ExecutionConfig,
-    model::{candle_stick::CandleStick, decimal::DecimalVec, session::Session, sl_trategy::SlStrategy},
-    parse_datetime, to_new_york_time,
+    model::{
+        candle_stick::CandleStick, decimal::DecimalVec, session::Session, sl_trategy::SlStrategy,
+    },
+    parse_datetime,
     strategies::macro_soup::MacroSoup,
+    to_new_york_time,
 };
 use chrono::Datelike;
 use rust_decimal::Decimal;
-use backtest::model::trading_model::TradingModel;
 
 #[derive(Clone)]
 struct SetupRow {
@@ -81,10 +84,17 @@ fn main() {
     setups.sort_by(|a, b| b.profit_r.cmp(&a.profit_r).then(b.pf_r.cmp(&a.pf_r)));
     let top3: Vec<_> = setups.into_iter().take(3).collect();
 
-    println!("macro_soup_top3_monthly_breakdown slip_ticks={} qty_btc={}", slip, qty_btc);
+    println!(
+        "macro_soup_top3_monthly_breakdown slip_ticks={} qty_btc={}",
+        slip, qty_btc
+    );
     for (idx, s) in top3.iter().enumerate() {
-        let s_start = parse_datetime(&format!("2022-09-30 {}:00", s.start)).unwrap().time();
-        let s_end = parse_datetime(&format!("2022-09-30 {}:00", s.end)).unwrap().time();
+        let s_start = parse_datetime(&format!("2022-09-30 {}:00", s.start))
+            .unwrap()
+            .time();
+        let s_end = parse_datetime(&format!("2022-09-30 {}:00", s.end))
+            .unwrap()
+            .time();
         let model = MacroSoup {
             candles: candles.clone(),
             rr_threshold: Decimal::from(3),

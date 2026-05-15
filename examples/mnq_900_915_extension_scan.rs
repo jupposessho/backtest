@@ -78,10 +78,7 @@ fn main() {
         let mut after_start = None;
 
         for (k, c) in day.iter().enumerate() {
-            let dt = New_York
-                .timestamp_opt(c.open_time, 0)
-                .single()
-                .expect("ts");
+            let dt = New_York.timestamp_opt(c.open_time, 0).single().expect("ts");
             let h = dt.hour();
             let m = dt.minute();
             if h == 9 && m < 15 {

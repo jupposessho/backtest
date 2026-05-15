@@ -387,48 +387,48 @@ fn evaluate_pnl_rules(samples: &[DaySample], top_rules: &[RuleResult]) -> Vec<Pn
         for slip in slip_ticks {
             for commission in commissions {
                 for target_mode in target_modes {
-                let mut vals = Vec::new();
-                let mut wins = 0usize;
-                let mut sum_rr = 0.0;
+                    let mut vals = Vec::new();
+                    let mut wins = 0usize;
+                    let mut sum_rr = 0.0;
 
-                for s in samples {
-                    let rp = percentile_rank(&sorted_ranges, s.range_size);
-                    if rp > range_pct_cap {
-                        continue;
-                    }
-                    if s.overshoot_pct > max_ov {
-                        continue;
-                    }
-                    if s.reclaim_bars.is_none() || s.reclaim_bars.unwrap_or(999) > reclaim_cap {
-                        continue;
-                    }
+                    for s in samples {
+                        let rp = percentile_rank(&sorted_ranges, s.range_size);
+                        if rp > range_pct_cap {
+                            continue;
+                        }
+                        if s.overshoot_pct > max_ov {
+                            continue;
+                        }
+                        if s.reclaim_bars.is_none() || s.reclaim_bars.unwrap_or(999) > reclaim_cap {
+                            continue;
+                        }
 
-                    if let Some((net_r, win, rr_before_costs)) =
-                        simulate_trade_r(s, slip, commission, tick_size, target_mode)
-                    {
-                        vals.push(net_r);
-                        sum_rr += rr_before_costs;
-                        if win {
-                            wins += 1;
+                        if let Some((net_r, win, rr_before_costs)) =
+                            simulate_trade_r(s, slip, commission, tick_size, target_mode)
+                        {
+                            vals.push(net_r);
+                            sum_rr += rr_before_costs;
+                            if win {
+                                wins += 1;
+                            }
                         }
                     }
-                }
 
-                if vals.len() < 40 {
-                    continue;
-                }
-                let expectancy = vals.iter().sum::<f64>() / vals.len() as f64;
-                let win_rate = wins as f64 / vals.len() as f64 * 100.0;
-                out.push(PnlResult {
-                    rule: r.rule.clone(),
-                    slip_ticks: slip,
-                    rt_commission_points: commission,
-                    trades: vals.len(),
-                    win_rate,
-                    net_expectancy_r: expectancy,
-                    avg_rr_before_costs: sum_rr / vals.len() as f64,
-                    target_mode: target_mode.to_string(),
-                });
+                    if vals.len() < 40 {
+                        continue;
+                    }
+                    let expectancy = vals.iter().sum::<f64>() / vals.len() as f64;
+                    let win_rate = wins as f64 / vals.len() as f64 * 100.0;
+                    out.push(PnlResult {
+                        rule: r.rule.clone(),
+                        slip_ticks: slip,
+                        rt_commission_points: commission,
+                        trades: vals.len(),
+                        win_rate,
+                        net_expectancy_r: expectancy,
+                        avg_rr_before_costs: sum_rr / vals.len() as f64,
+                        target_mode: target_mode.to_string(),
+                    });
                 }
             }
         }
@@ -506,8 +506,9 @@ fn evaluate_rules(samples: &[DaySample]) -> Vec<RuleResult> {
 }
 
 fn main() {
-    let candles = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
-        .expect("failed loading MNQ parquet");
+    let candles =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("failed loading MNQ parquet");
 
     let samples = collect_samples(&candles);
     if samples.is_empty() {

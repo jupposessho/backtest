@@ -57,7 +57,9 @@ fn ema(vals: &[f64], p: usize) -> Vec<f64> {
 }
 
 fn load_days() -> Vec<Day> {
-    let data = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet")).expect("load");
+    let data =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("load");
     let mut bars = Vec::new();
     for c in data {
         let dt = New_York.timestamp_opt(c.open_time, 0).single().expect("ts");
@@ -177,7 +179,11 @@ fn try_trade(day: &Day, cfg: Cfg) -> Option<f64> {
         day.bars[eidx].o + slip
     };
 
-    let mut extreme = if side == Side::Short { f64::NEG_INFINITY } else { f64::INFINITY };
+    let mut extreme = if side == Side::Short {
+        f64::NEG_INFINITY
+    } else {
+        f64::INFINITY
+    };
     for b in day.bars.iter().take(cidx + 1).skip(tidx) {
         if side == Side::Short {
             extreme = extreme.max(b.hi);
@@ -207,8 +213,16 @@ fn try_trade(day: &Day, cfg: Cfg) -> Option<f64> {
     }
 
     // tp1_frac at 1R, rest at opposite side, flat at >= 12:00
-    let tp1 = if side == Side::Short { entry - risk } else { entry + risk };
-    let tp2 = if side == Side::Short { day.rl + slip } else { day.rh - slip };
+    let tp1 = if side == Side::Short {
+        entry - risk
+    } else {
+        entry + risk
+    };
+    let tp2 = if side == Side::Short {
+        day.rl + slip
+    } else {
+        day.rh - slip
+    };
     let cost_r = comm_rt / risk;
 
     let mut hit_tp1 = false;
@@ -221,7 +235,11 @@ fn try_trade(day: &Day, cfg: Cfg) -> Option<f64> {
             };
             return Some(r);
         }
-        let stop_hit = if side == Side::Short { b.hi >= stop } else { b.lo <= stop };
+        let stop_hit = if side == Side::Short {
+            b.hi >= stop
+        } else {
+            b.lo <= stop
+        };
         if stop_hit {
             let r = if hit_tp1 {
                 cfg.tp1_frac * 1.0 - (1.0 - cfg.tp1_frac) * 1.0 - cost_r
@@ -231,13 +249,21 @@ fn try_trade(day: &Day, cfg: Cfg) -> Option<f64> {
             return Some(r);
         }
         if !hit_tp1 {
-            let h1 = if side == Side::Short { b.lo <= tp1 } else { b.hi >= tp1 };
+            let h1 = if side == Side::Short {
+                b.lo <= tp1
+            } else {
+                b.hi >= tp1
+            };
             if h1 {
                 hit_tp1 = true;
             }
         }
         if hit_tp1 {
-            let h2 = if side == Side::Short { b.lo <= tp2 } else { b.hi >= tp2 };
+            let h2 = if side == Side::Short {
+                b.lo <= tp2
+            } else {
+                b.hi >= tp2
+            };
             if h2 {
                 let rr2 = (tp2 - entry).abs() / risk;
                 return Some(cfg.tp1_frac * 1.0 + (1.0 - cfg.tp1_frac) * rr2 - cost_r);
@@ -286,7 +312,11 @@ fn eval(days: &[Day], cfg: Cfg) -> (usize, f64, f64, f64, BTreeMap<String, f64>)
     } else {
         0.0
     };
-    let exp = if trades > 0 { sum_r / trades as f64 } else { 0.0 };
+    let exp = if trades > 0 {
+        sum_r / trades as f64
+    } else {
+        0.0
+    };
     (trades, wr, exp, max_dd, monthly)
 }
 
@@ -301,7 +331,18 @@ fn main() {
     let stop_caps = [0.15_f64, 0.20, 0.25];
     let tp1_fracs = [0.25_f64, 0.33, 0.50];
 
-    let mut rows: Vec<(String, usize, f64, f64, f64, usize, f64, f64, f64, BTreeMap<String, f64>)> = Vec::new();
+    let mut rows: Vec<(
+        String,
+        usize,
+        f64,
+        f64,
+        f64,
+        usize,
+        f64,
+        f64,
+        f64,
+        BTreeMap<String, f64>,
+    )> = Vec::new();
 
     for (zlo, zhi) in zone_pairs {
         for dl in deadlines {
@@ -343,10 +384,16 @@ fn main() {
         }
     }
 
-    rows.sort_by(|a, b| b.7.total_cmp(&a.7).then(b.5.cmp(&a.5)).then(a.8.total_cmp(&b.8)));
+    rows.sort_by(|a, b| {
+        b.7.total_cmp(&a.7)
+            .then(b.5.cmp(&a.5))
+            .then(a.8.total_cmp(&b.8))
+    });
 
     println!("MNQ zone reversal tuning (70/30 split)");
-    println!("Execution fixed: EMA50/100 gate, one trade/day, slip=1 tick, comm=0.5pt RT, flat>=12:00");
+    println!(
+        "Execution fixed: EMA50/100 gate, one trade/day, slip=1 tick, comm=0.5pt RT, flat>=12:00"
+    );
     for (i, r) in rows.iter().take(10).enumerate() {
         println!(
             "{}. {} | IS n={} wr={:.2}% exp={:.3}R dd={:.2}R | OOS n={} wr={:.2}% exp={:.3}R dd={:.2}R",

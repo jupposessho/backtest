@@ -366,8 +366,9 @@ fn simulate(sample: &DaySample, cfg: ExecCfg) -> Option<(f64, bool)> {
 }
 
 fn main() {
-    let candles = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
-        .expect("load parquet");
+    let candles =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("load parquet");
     let samples = collect_samples(&candles);
     let mut ranges: Vec<f64> = samples.iter().map(|s| s.range_size).collect();
     ranges.sort_by(f64::total_cmp);
@@ -375,9 +376,20 @@ fn main() {
     let reclaim_caps = [1usize, 2, 3];
     let ov_caps = [25.0, 35.0, 50.0];
     let range_caps = [0.3, 0.4, 0.5];
-    let entries = [EntryMode::NextOpen, EntryMode::ReclaimBoundaryLimit, EntryMode::MidPullback];
-    let stops = [StopMode::BreakExtremePlusTick, StopMode::CappedStructure35Range];
-    let exits = [ExitMode::OppRange, ExitMode::Fixed2R, ExitMode::Partial1RRunnerOpp];
+    let entries = [
+        EntryMode::NextOpen,
+        EntryMode::ReclaimBoundaryLimit,
+        EntryMode::MidPullback,
+    ];
+    let stops = [
+        StopMode::BreakExtremePlusTick,
+        StopMode::CappedStructure35Range,
+    ];
+    let exits = [
+        ExitMode::OppRange,
+        ExitMode::Fixed2R,
+        ExitMode::Partial1RRunnerOpp,
+    ];
     let t_stops = [11_u32, 12_u32];
     let slips = [0_i32, 1_i32];
     let comms = [0.25_f64, 0.5_f64];
@@ -412,13 +424,20 @@ fn main() {
                                             if s.reclaim_idx.is_none() {
                                                 continue;
                                             }
-                                            let rb = s.reclaim_idx.expect("reclaim") - s.first_break_idx;
+                                            let rb =
+                                                s.reclaim_idx.expect("reclaim") - s.first_break_idx;
                                             if rb > reclaim_cap {
                                                 continue;
                                             }
                                             let ov = match s.break_side {
-                                                Side::Top => (s.break_extreme - s.range_high) / s.range_size * 100.0,
-                                                Side::Bottom => (s.range_low - s.break_extreme) / s.range_size * 100.0,
+                                                Side::Top => {
+                                                    (s.break_extreme - s.range_high) / s.range_size
+                                                        * 100.0
+                                                }
+                                                Side::Bottom => {
+                                                    (s.range_low - s.break_extreme) / s.range_size
+                                                        * 100.0
+                                                }
                                             };
                                             if ov > ov_cap {
                                                 continue;
@@ -472,7 +491,11 @@ fn main() {
         }
     }
 
-    rows.sort_by(|a, b| b.exp_r.total_cmp(&a.exp_r).then(b.win_rate.total_cmp(&a.win_rate)));
+    rows.sort_by(|a, b| {
+        b.exp_r
+            .total_cmp(&a.exp_r)
+            .then(b.win_rate.total_cmp(&a.win_rate))
+    });
 
     println!("MNQ reversal execution scan (6-9 NY range)");
     println!("Samples: {}", samples.len());

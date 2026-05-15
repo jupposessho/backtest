@@ -29,8 +29,9 @@ fn percentile(mut values: Vec<f64>, p: f64) -> f64 {
 }
 
 fn main() {
-    let candles: Vec<CandleStick> = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
-        .expect("failed loading MNQ parquet");
+    let candles: Vec<CandleStick> =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("failed loading MNQ parquet");
 
     if candles.is_empty() {
         println!("No candles loaded.");
@@ -197,7 +198,13 @@ fn main() {
     let deviations: Vec<f64> = both_rows.iter().map(|r| r.deviation).collect();
     let dev_pct_range: Vec<f64> = both_rows
         .iter()
-        .map(|r| if r.range_size > 0.0 { r.deviation / r.range_size * 100.0 } else { 0.0 })
+        .map(|r| {
+            if r.range_size > 0.0 {
+                r.deviation / r.range_size * 100.0
+            } else {
+                0.0
+            }
+        })
         .collect();
 
     let mean_dev = if deviations.is_empty() {

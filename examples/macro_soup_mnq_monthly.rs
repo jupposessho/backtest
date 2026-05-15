@@ -7,8 +7,9 @@ use backtest::{
         candle_stick::CandleStick, decimal::DecimalVec, session::Session, sl_trategy::SlStrategy,
         trading_model::TradingModel,
     },
-    parse_datetime, to_new_york_time,
+    parse_datetime,
     strategies::macro_soup::MacroSoup,
+    to_new_york_time,
 };
 use chrono::Datelike;
 use rust_decimal::Decimal;
@@ -62,7 +63,9 @@ fn monthly_for_window(
     start_hm: &str,
     from_ts: i64,
 ) -> (usize, Decimal, BTreeMap<String, Decimal>) {
-    let start = parse_datetime(&format!("2022-09-30 {}:00", start_hm)).unwrap().time();
+    let start = parse_datetime(&format!("2022-09-30 {}:00", start_hm))
+        .unwrap()
+        .time();
     let end = start + chrono::Duration::minutes(60);
 
     let model = MacroSoup {
@@ -123,7 +126,14 @@ fn main() {
     md.push_str("## 1m\n\n");
     for w in top_windows {
         let (trades, total, by_month) = monthly_for_window(&mnq_1m, w, from_ts);
-        md.push_str(&format!("### Window {}-{}\n\n", w, parse_datetime(&format!("2022-09-30 {}:00", w)).unwrap().time() + chrono::Duration::minutes(60)));
+        md.push_str(&format!(
+            "### Window {}-{}\n\n",
+            w,
+            parse_datetime(&format!("2022-09-30 {}:00", w))
+                .unwrap()
+                .time()
+                + chrono::Duration::minutes(60)
+        ));
         md.push_str(&format!("- trades since 2025-01-01: {}\n", trades));
         md.push_str(&format!("- total usd: {}\n\n", total.round_dp(2)));
         md.push_str("| month | usd |\n|---|---:|\n");
@@ -136,7 +146,14 @@ fn main() {
     md.push_str("## 3m\n\n");
     for w in top_windows {
         let (trades, total, by_month) = monthly_for_window(&mnq_3m, w, from_ts);
-        md.push_str(&format!("### Window {}-{}\n\n", w, parse_datetime(&format!("2022-09-30 {}:00", w)).unwrap().time() + chrono::Duration::minutes(60)));
+        md.push_str(&format!(
+            "### Window {}-{}\n\n",
+            w,
+            parse_datetime(&format!("2022-09-30 {}:00", w))
+                .unwrap()
+                .time()
+                + chrono::Duration::minutes(60)
+        ));
         md.push_str(&format!("- trades since 2025-01-01: {}\n", trades));
         md.push_str(&format!("- total usd: {}\n\n", total.round_dp(2)));
         md.push_str("| month | usd |\n|---|---:|\n");

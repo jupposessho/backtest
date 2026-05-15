@@ -57,7 +57,14 @@ fn resample_5m(v: &[B1]) -> Vec<B1> {
             lo = lo.min(b.lo);
         }
         let dt = New_York.timestamp_opt(bucket, 0).single().expect("ts");
-        out.push(B1 { ts: bucket, h: dt.hour(), o: s[0].o, hi, lo, c: s[s.len() - 1].c });
+        out.push(B1 {
+            ts: bucket,
+            h: dt.hour(),
+            o: s[0].o,
+            hi,
+            lo,
+            c: s[s.len() - 1].c,
+        });
         i = j;
     }
     out
@@ -95,19 +102,39 @@ fn find_mss_5m(v5: &[B1], side: Side, start: usize, min_disp: f64) -> Option<usi
 }
 
 fn collect_days() -> Vec<Day> {
-    let data = CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet")).expect("load");
+    let data =
+        CandleStickLoader::load_source(CandleDataSource::ParquetPath("assets/mnq_1m_cont.parquet"))
+            .expect("load");
     let mut bars = Vec::new();
     for c in data {
         let dt = New_York.timestamp_opt(c.open_time, 0).single().expect("ts");
-        bars.push(B1 { ts: c.open_time, h: dt.hour(), o: d2f(c.open.0), hi: d2f(c.high.0), lo: d2f(c.low.0), c: d2f(c.close.0) });
+        bars.push(B1 {
+            ts: c.open_time,
+            h: dt.hour(),
+            o: d2f(c.open.0),
+            hi: d2f(c.high.0),
+            lo: d2f(c.low.0),
+            c: d2f(c.close.0),
+        });
     }
 
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < bars.len() {
-        let d = New_York.timestamp_opt(bars[i].ts, 0).single().expect("ts").date_naive();
+        let d = New_York
+            .timestamp_opt(bars[i].ts, 0)
+            .single()
+            .expect("ts")
+            .date_naive();
         let mut j = i;
-        while j < bars.len() && New_York.timestamp_opt(bars[j].ts, 0).single().expect("ts").date_naive() == d {
+        while j < bars.len()
+            && New_York
+                .timestamp_opt(bars[j].ts, 0)
+                .single()
+                .expect("ts")
+                .date_naive()
+                == d
+        {
             j += 1;
         }
         let day_bars = bars[i..j].to_vec();
@@ -122,7 +149,11 @@ fn collect_days() -> Vec<Day> {
             }
         }
         if has && rh > rl {
-            out.push(Day { bars: day_bars, range_hi: rh, range_lo: rl });
+            out.push(Day {
+                bars: day_bars,
+                range_hi: rh,
+                range_lo: rl,
+            });
         }
         i = j;
     }
@@ -133,38 +164,76 @@ fn signal_baseline(day: &Day) -> Option<EntrySignal> {
     let range = day.range_hi - day.range_lo;
     let mut first = None;
     for (k, b) in day.bars.iter().enumerate() {
-        if b.h < 9 { continue; }
-        if b.hi >= day.range_hi { first = Some((k, Side::Short)); break; }
-        if b.lo <= day.range_lo { first = Some((k, Side::Long)); break; }
+        if b.h < 9 {
+            continue;
+        }
+        if b.hi >= day.range_hi {
+            first = Some((k, Side::Short));
+            break;
+        }
+        if b.lo <= day.range_lo {
+            first = Some((k, Side::Long));
+            break;
+        }
     }
     let (fidx, side) = first?;
 
-    let mut break_extreme = if side == Side::Short { day.range_hi } else { day.range_lo };
+    let mut break_extreme = if side == Side::Short {
+        day.range_hi
+    } else {
+        day.range_lo
+    };
     let mut reclaim = None;
     let mut overshoot: f64 = 0.0;
     for (off, b) in day.bars.iter().enumerate().skip(fidx) {
         if side == Side::Short {
-            if b.hi > break_extreme { break_extreme = b.hi; }
+            if b.hi > break_extreme {
+                break_extreme = b.hi;
+            }
             overshoot = overshoot.max((break_extreme - day.range_hi) / range * 100.0);
-            if b.c <= day.range_hi { reclaim = Some(off); break; }
+            if b.c <= day.range_hi {
+                reclaim = Some(off);
+                break;
+            }
         } else {
-            if b.lo < break_extreme { break_extreme = b.lo; }
+            if b.lo < break_extreme {
+                break_extreme = b.lo;
+            }
             overshoot = overshoot.max((day.range_lo - break_extreme) / range * 100.0);
-            if b.c >= day.range_lo { reclaim = Some(off); break; }
+            if b.c >= day.range_lo {
+                reclaim = Some(off);
+                break;
+            }
         }
     }
     let ridx = reclaim?;
-    if ridx - fidx > 1 { return None; }
-    if overshoot > 35.0 { return None; }
-    if day.bars[ridx].h > 10 { return None; }
+    if ridx - fidx > 1 {
+        return None;
+    }
+    if overshoot > 35.0 {
+        return None;
+    }
+    if day.bars[ridx].h > 10 {
+        return None;
+    }
     let eidx = ridx + 1;
-    if eidx >= day.bars.len() { return None; }
+    if eidx >= day.bars.len() {
+        return None;
+    }
 
     Some(EntrySignal {
         side,
         entry_idx: eidx,
-        stop_anchor_hi: if side == Side::Short { break_extreme } else { day.range_hi },
-        stop_anchor_lo: if side == Side::Long { break_extreme } else { day.range_lo },
+        stop_anchor_hi: if side == Side::Short {
+            break_extreme
+        } else {
+            day.range_hi
+        },
+        stop_anchor_lo: if side == Side::Long {
+            break_extreme
+        } else {
+            day.range_lo
+        },
     })
 }
 
@@ -172,9 +241,17 @@ fn signal_ict(day: &Day) -> Option<EntrySignal> {
     let range = day.range_hi - day.range_lo;
     let mut sweep = None;
     for (k, b) in day.bars.iter().enumerate() {
-        if b.h < 9 { continue; }
-        if b.hi >= day.range_hi { sweep = Some((k, Side::Short)); break; }
-        if b.lo <= day.range_lo { sweep = Some((k, Side::Long)); break; }
+        if b.h < 9 {
+            continue;
+        }
+        if b.hi >= day.range_hi {
+            sweep = Some((k, Side::Short));
+            break;
+        }
+        if b.lo <= day.range_lo {
+            sweep = Some((k, Side::Long));
+            break;
+        }
     }
     let (sidx, side) = sweep?;
 
@@ -198,66 +275,115 @@ fn signal_ict(day: &Day) -> Option<EntrySignal> {
         if side == Side::Short {
             let upper = day.bars[k - 2].lo;
             let lower = day.bars[k].hi;
-            if upper <= lower { continue; }
-            if (upper - lower) / range * 100.0 > 35.0 { continue; }
+            if upper <= lower {
+                continue;
+            }
+            if (upper - lower) / range * 100.0 > 35.0 {
+                continue;
+            }
             let mid = lower + (upper - lower) * 0.5;
             let mut mit = None;
             for (m, b) in day.bars.iter().enumerate().skip(k + 1) {
-                if b.hi >= mid { mit = Some(m); break; }
+                if b.hi >= mid {
+                    mit = Some(m);
+                    break;
+                }
             }
             if let Some(m) = mit {
                 let mut ob = None;
                 for t in (start1..=k).rev() {
-                    if day.bars[t].c > day.bars[t].o { ob = Some(t); break; }
+                    if day.bars[t].c > day.bars[t].o {
+                        ob = Some(t);
+                        break;
+                    }
                 }
                 let o = ob?;
                 ob_hi = day.bars[o].hi;
                 ob_lo = day.bars[o].lo;
                 let mut invalid = false;
                 for b in day.bars.iter().skip(o + 1).take(m.saturating_sub(o + 1)) {
-                    if b.c > ob_hi { invalid = true; break; }
+                    if b.c > ob_hi {
+                        invalid = true;
+                        break;
+                    }
                 }
-                if invalid { continue; }
+                if invalid {
+                    continue;
+                }
                 for (e, b) in day.bars.iter().enumerate().skip(m) {
-                    if b.h > 10 { break; }
-                    if b.hi >= ob_lo && b.lo <= ob_hi { entry_idx = Some(e + 1); break; }
+                    if b.h > 10 {
+                        break;
+                    }
+                    if b.hi >= ob_lo && b.lo <= ob_hi {
+                        entry_idx = Some(e + 1);
+                        break;
+                    }
                 }
             }
         } else {
             let lower = day.bars[k - 2].hi;
             let upper = day.bars[k].lo;
-            if lower >= upper { continue; }
-            if (upper - lower) / range * 100.0 > 35.0 { continue; }
+            if lower >= upper {
+                continue;
+            }
+            if (upper - lower) / range * 100.0 > 35.0 {
+                continue;
+            }
             let mid = upper - (upper - lower) * 0.5;
             let mut mit = None;
             for (m, b) in day.bars.iter().enumerate().skip(k + 1) {
-                if b.lo <= mid { mit = Some(m); break; }
+                if b.lo <= mid {
+                    mit = Some(m);
+                    break;
+                }
             }
             if let Some(m) = mit {
                 let mut ob = None;
                 for t in (start1..=k).rev() {
-                    if day.bars[t].c < day.bars[t].o { ob = Some(t); break; }
+                    if day.bars[t].c < day.bars[t].o {
+                        ob = Some(t);
+                        break;
+                    }
                 }
                 let o = ob?;
                 ob_hi = day.bars[o].hi;
                 ob_lo = day.bars[o].lo;
                 let mut invalid = false;
                 for b in day.bars.iter().skip(o + 1).take(m.saturating_sub(o + 1)) {
-                    if b.c < ob_lo { invalid = true; break; }
+                    if b.c < ob_lo {
+                        invalid = true;
+                        break;
+                    }
                 }
-                if invalid { continue; }
+                if invalid {
+                    continue;
+                }
                 for (e, b) in day.bars.iter().enumerate().skip(m) {
-                    if b.h > 10 { break; }
-                    if b.hi >= ob_lo && b.lo <= ob_hi { entry_idx = Some(e + 1); break; }
+                    if b.h > 10 {
+                        break;
+                    }
+                    if b.hi >= ob_lo && b.lo <= ob_hi {
+                        entry_idx = Some(e + 1);
+                        break;
+                    }
                 }
             }
         }
-        if entry_idx.is_some() { break; }
+        if entry_idx.is_some() {
+            break;
+        }
     }
 
     let eidx = entry_idx?;
-    if eidx >= day.bars.len() { return None; }
-    Some(EntrySignal { side, entry_idx: eidx, stop_anchor_hi: ob_hi, stop_anchor_lo: ob_lo })
+    if eidx >= day.bars.len() {
+        return None;
+    }
+    Some(EntrySignal {
+        side,
+        entry_idx: eidx,
+        stop_anchor_hi: ob_hi,
+        stop_anchor_lo: ob_lo,
+    })
 }
 
 fn execute(day: &Day, s: EntrySignal) -> Option<(f64, bool)> {
@@ -265,28 +391,72 @@ fn execute(day: &Day, s: EntrySignal) -> Option<(f64, bool)> {
     let slip = tick;
     let comm_rt_pts = 0.5;
     let range = day.range_hi - day.range_lo;
-    let entry = if s.side == Side::Short { day.bars[s.entry_idx].o - slip } else { day.bars[s.entry_idx].o + slip };
-    let stop_struct = if s.side == Side::Short { s.stop_anchor_hi + tick + slip } else { s.stop_anchor_lo - tick - slip };
-    let stop_cap = if s.side == Side::Short { entry + 0.20 * range } else { entry - 0.20 * range };
-    let stop = if s.side == Side::Short { stop_struct.min(stop_cap) } else { stop_struct.max(stop_cap) };
+    let entry = if s.side == Side::Short {
+        day.bars[s.entry_idx].o - slip
+    } else {
+        day.bars[s.entry_idx].o + slip
+    };
+    let stop_struct = if s.side == Side::Short {
+        s.stop_anchor_hi + tick + slip
+    } else {
+        s.stop_anchor_lo - tick - slip
+    };
+    let stop_cap = if s.side == Side::Short {
+        entry + 0.20 * range
+    } else {
+        entry - 0.20 * range
+    };
+    let stop = if s.side == Side::Short {
+        stop_struct.min(stop_cap)
+    } else {
+        stop_struct.max(stop_cap)
+    };
     let risk = (entry - stop).abs();
-    if risk < tick { return None; }
+    if risk < tick {
+        return None;
+    }
 
-    let tp1 = if s.side == Side::Short { entry - risk } else { entry + risk };
-    let tp2 = if s.side == Side::Short { day.range_lo + slip } else { day.range_hi - slip };
+    let tp1 = if s.side == Side::Short {
+        entry - risk
+    } else {
+        entry + risk
+    };
+    let tp2 = if s.side == Side::Short {
+        day.range_lo + slip
+    } else {
+        day.range_hi - slip
+    };
     let cost_r = comm_rt_pts / risk;
 
     let mut got_tp1 = false;
     for b in day.bars.iter().skip(s.entry_idx) {
-        if b.h >= 12 { return Some((if got_tp1 { 0.4 - cost_r } else { -0.1 - cost_r }, false)); }
-        let stop_hit = if s.side == Side::Short { b.hi >= stop } else { b.lo <= stop };
-        if stop_hit { return Some((if got_tp1 { 0.5 - cost_r } else { -1.0 - cost_r }, false)); }
+        if b.h >= 12 {
+            return Some((if got_tp1 { 0.4 - cost_r } else { -0.1 - cost_r }, false));
+        }
+        let stop_hit = if s.side == Side::Short {
+            b.hi >= stop
+        } else {
+            b.lo <= stop
+        };
+        if stop_hit {
+            return Some((if got_tp1 { 0.5 - cost_r } else { -1.0 - cost_r }, false));
+        }
         if !got_tp1 {
-            let hit = if s.side == Side::Short { b.lo <= tp1 } else { b.hi >= tp1 };
-            if hit { got_tp1 = true; }
+            let hit = if s.side == Side::Short {
+                b.lo <= tp1
+            } else {
+                b.hi >= tp1
+            };
+            if hit {
+                got_tp1 = true;
+            }
         }
         if got_tp1 {
-            let hit2 = if s.side == Side::Short { b.lo <= tp2 } else { b.hi >= tp2 };
+            let hit2 = if s.side == Side::Short {
+                b.lo <= tp2
+            } else {
+                b.hi >= tp2
+            };
             if hit2 {
                 let rr2 = (tp2 - entry).abs() / risk;
                 return Some((0.5 + 0.5 * rr2 - cost_r, true));
@@ -304,12 +474,18 @@ fn eval(days: &[Day], signal_fn: fn(&Day) -> Option<EntrySignal>) -> (usize, f64
         if let Some(sig) = signal_fn(d) {
             if let Some((r, win)) = execute(d, sig) {
                 trades += 1;
-                if win { wins += 1; }
+                if win {
+                    wins += 1;
+                }
                 sum += r;
             }
         }
     }
-    let wr = if trades > 0 { wins as f64 / trades as f64 * 100.0 } else { 0.0 };
+    let wr = if trades > 0 {
+        wins as f64 / trades as f64 * 100.0
+    } else {
+        0.0
+    };
     let exp = if trades > 0 { sum / trades as f64 } else { 0.0 };
     (trades, wr, exp)
 }
@@ -328,9 +504,21 @@ fn main() {
     println!("A/B with identical execution (70/30 chronological split)");
     println!("Execution: slip=1 tick, comm_rt=0.5 pts, stop_cap=20% range, TP1 50%@1R, TP2 50%@opp range, flat>=12:00");
     println!("IN-SAMPLE 70%:");
-    println!("- baseline(6-9 reclaim): trades={} win_rate={:.2}% exp={:.3}R", bt, bwr, bexp);
-    println!("- ict(MSS5+iFVG1+OB1): trades={} win_rate={:.2}% exp={:.3}R", it, iwr, iexp);
+    println!(
+        "- baseline(6-9 reclaim): trades={} win_rate={:.2}% exp={:.3}R",
+        bt, bwr, bexp
+    );
+    println!(
+        "- ict(MSS5+iFVG1+OB1): trades={} win_rate={:.2}% exp={:.3}R",
+        it, iwr, iexp
+    );
     println!("OUT-OF-SAMPLE 30%:");
-    println!("- baseline(6-9 reclaim): trades={} win_rate={:.2}% exp={:.3}R", bt2, bwr2, bexp2);
-    println!("- ict(MSS5+iFVG1+OB1): trades={} win_rate={:.2}% exp={:.3}R", it2, iwr2, iexp2);
+    println!(
+        "- baseline(6-9 reclaim): trades={} win_rate={:.2}% exp={:.3}R",
+        bt2, bwr2, bexp2
+    );
+    println!(
+        "- ict(MSS5+iFVG1+OB1): trades={} win_rate={:.2}% exp={:.3}R",
+        it2, iwr2, iexp2
+    );
 }
