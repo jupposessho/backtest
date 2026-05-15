@@ -115,6 +115,10 @@ name = "ob_engulfing"
 path = "src/ob_engulfing.rs"
 
 [[bin]]
+name = "ob_engulfing_kz_sweep"
+path = "src/ob_engulfing_kz_sweep.rs"
+
+[[bin]]
 name = "mayne_review"
 path = "src/mayne_review.rs"
 
@@ -179,8 +183,24 @@ name = "ema_wick_reclaim_mnq"
 path = "src/ema_wick_reclaim_mnq.rs"
 
 [[bin]]
+name = "ema_wick_reclaim_mnq_validate"
+path = "src/ema_wick_reclaim_mnq_validate.rs"
+
+[[bin]]
 name = "killzone_rejection_mnq"
 path = "src/killzone_rejection_mnq.rs"
+
+[[bin]]
+name = "mc_playbook_sweep"
+path = "src/mc_playbook_sweep.rs"
+
+[[bin]]
+name = "mnq_fractal_alignment_sweep"
+path = "src/mnq_fractal_alignment_sweep.rs"
+
+[[bin]]
+name = "mnq_failure_swing_sweep"
+path = "src/mnq_failure_swing_sweep.rs"
 
 #[[bin]]
 #name = "trade"
