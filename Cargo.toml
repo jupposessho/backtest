@@ -107,6 +107,10 @@ name = "orb_variants"
 path = "src/orb_variants.rs"
 
 [[bin]]
+name = "orb_variants_mes"
+path = "src/orb_variants_mes.rs"
+
+[[bin]]
 name = "ce_sweep"
 path = "src/ce_sweep.rs"
 
@@ -201,6 +205,42 @@ path = "src/mnq_fractal_alignment_sweep.rs"
 [[bin]]
 name = "mnq_failure_swing_sweep"
 path = "src/mnq_failure_swing_sweep.rs"
+
+[[bin]]
+name = "mes_failure_swing_sweep"
+path = "src/mes_failure_swing_sweep.rs"
+
+[[bin]]
+name = "mnq_killzone_midpoint_hunt"
+path = "src/mnq_killzone_midpoint_hunt.rs"
+
+[[bin]]
+name = "mes_killzone_midpoint_hunt"
+path = "src/mes_killzone_midpoint_hunt.rs"
+
+[[bin]]
+name = "ema_wick_reclaim_mnq_core_hunt"
+path = "src/ema_wick_reclaim_mnq_core_hunt.rs"
+
+[[bin]]
+name = "ema_wick_reclaim_mnq_core_champion"
+path = "src/ema_wick_reclaim_mnq_core_champion.rs"
+
+[[bin]]
+name = "ema_wick_reclaim_mnq_walk_forward"
+path = "src/ema_wick_reclaim_mnq_walk_forward.rs"
+
+[[bin]]
+name = "ema_wick_reclaim_mes_core_hunt"
+path = "src/ema_wick_reclaim_mes_core_hunt.rs"
+
+[[bin]]
+name = "gold_hunt"
+path = "src/gold_hunt.rs"
+
+[[bin]]
+name = "gold_mechanical_hunt"
+path = "src/gold_mechanical_hunt.rs"
 
 #[[bin]]
 #name = "trade"
