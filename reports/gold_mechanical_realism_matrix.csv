@@ -1,0 +1,19 @@
+strategy,config,slippage_ticks_per_side,gross_usd,net_usd,verdict
+donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,1,7303.55,7257.35,PASS
+donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,2,7303.55,7235.35,PASS
+donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,3,7303.55,7213.35,PASS
+momentum_12m,ma=100 mode=long_only,1,4604.00,4469.60,PASS
+momentum_12m,ma=100 mode=long_only,2,4604.00,4405.60,PASS
+momentum_12m,ma=100 mode=long_only,3,4604.00,4341.60,PASS
+ema_pullback_continuation,fast=30 slow=50,1,4203.00,3883.80,PASS
+ema_pullback_continuation,fast=30 slow=50,2,4203.00,3731.80,PASS
+ema_pullback_continuation,fast=30 slow=50,3,4203.00,3579.80,PASS
+vol_expansion_squeeze,breakout=10,1,4203.00,3883.80,PASS
+vol_expansion_squeeze,breakout=10,2,4203.00,3731.80,PASS
+vol_expansion_squeeze,breakout=10,3,4203.00,3579.80,PASS
+seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,1,4203.00,3883.80,PASS
+seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,2,4203.00,3731.80,PASS
+seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,3,4203.00,3579.80,PASS
+intraday_orb,dur=Minutes30 rr=1.5,1,-3191.00,-5914.60,FAIL
+intraday_orb,dur=Minutes30 rr=1.5,2,-5312.00,-8035.60,FAIL
+intraday_orb,dur=Minutes30 rr=1.5,3,-8957.00,-11680.60,FAIL

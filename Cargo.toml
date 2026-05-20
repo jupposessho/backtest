@@ -242,6 +242,10 @@ path = "src/gold_hunt.rs"
 name = "gold_mechanical_hunt"
 path = "src/gold_mechanical_hunt.rs"
 
+[[bin]]
+name = "gold_mechanical_cross_asset"
+path = "src/gold_mechanical_cross_asset.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"
