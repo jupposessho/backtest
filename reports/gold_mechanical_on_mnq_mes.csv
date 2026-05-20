@@ -1,0 +1,31 @@
+market,strategy,config,slippage_ticks_per_side,trades,gross_usd,net_usd,max_dd_usd,dd_from,dd_to,dataset_from,dataset_to,verdict
+mes,donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,1,18,1285.06,1200.46,7036.29,2021-11-28,2022-12-18,2021-03-07,2026-03-05,PASS
+mes,donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,2,18,1285.06,1155.46,7056.29,2021-11-28,2022-12-18,2021-03-07,2026-03-05,PASS
+mes,donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,3,18,1285.06,1110.46,7076.29,2021-11-28,2022-12-18,2021-03-07,2026-03-05,PASS
+mes,ema_pullback_continuation,fast=30 slow=50,1,73,1675.00,1331.90,5698.20,2021-09-15,2023-03-30,2021-03-07,2026-03-05,PASS
+mes,ema_pullback_continuation,fast=30 slow=50,2,73,1675.00,1149.40,5775.70,2021-09-15,2023-03-30,2021-03-07,2026-03-05,PASS
+mes,ema_pullback_continuation,fast=30 slow=50,3,73,1675.00,966.90,5853.20,2021-09-15,2023-03-30,2021-03-07,2026-03-05,PASS
+mes,momentum_12m,ma=100 mode=long_only,1,32,7577.50,7427.10,2715.75,2021-03-07,2022-12-28,2021-03-07,2026-03-05,PASS
+mes,momentum_12m,ma=100 mode=long_only,2,32,7577.50,7347.10,2742.95,2021-03-07,2023-01-04,2021-03-07,2026-03-05,PASS
+mes,momentum_12m,ma=100 mode=long_only,3,32,7577.50,7267.10,2770.45,2021-03-07,2023-01-04,2021-03-07,2026-03-05,PASS
+mes,seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,1,37,-1150.00,-1323.90,1776.55,2023-07-31,2025-07-31,2021-03-07,2026-03-05,FAIL
+mes,seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,2,37,-1150.00,-1416.40,1836.55,2023-07-31,2025-07-31,2021-03-07,2026-03-05,FAIL
+mes,seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,3,37,-1150.00,-1508.90,1896.55,2023-07-31,2025-07-31,2021-03-07,2026-03-05,FAIL
+mes,vol_expansion_squeeze,breakout=10,1,214,-6972.50,-7978.30,8917.30,2021-04-23,2026-03-01,2021-03-07,2026-03-05,FAIL
+mes,vol_expansion_squeeze,breakout=10,2,214,-6972.50,-8513.30,9439.80,2021-04-23,2026-03-01,2021-03-07,2026-03-05,FAIL
+mes,vol_expansion_squeeze,breakout=10,3,214,-6972.50,-9048.30,9962.30,2021-04-23,2026-03-01,2021-03-07,2026-03-05,FAIL
+mnq,donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,1,16,7036.10,6984.90,5719.64,2022-06-03,2023-02-26,2021-03-04,2026-03-03,PASS
+mnq,donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,2,16,7036.10,6968.90,5723.64,2022-06-03,2023-02-26,2021-03-04,2026-03-03,PASS
+mnq,donchian_breakout,entry=55 exit=20 sma=Some(200) atr_len=20 atr_mult=3.5,3,16,7036.10,6952.90,5727.64,2022-06-03,2023-02-26,2021-03-04,2026-03-03,PASS
+mnq,ema_pullback_continuation,fast=30 slow=50,1,78,10764.50,10514.90,9148.40,2024-07-21,2025-02-25,2021-03-04,2026-03-03,PASS
+mnq,ema_pullback_continuation,fast=30 slow=50,2,78,10764.50,10436.90,9165.40,2024-07-21,2025-02-25,2021-03-04,2026-03-03,PASS
+mnq,ema_pullback_continuation,fast=30 slow=50,3,78,10764.50,10358.90,9182.40,2024-07-21,2025-02-25,2021-03-04,2026-03-03,PASS
+mnq,momentum_12m,ma=100 mode=long_only,1,22,13558.50,13488.10,6716.90,2022-01-09,2022-12-16,2021-03-04,2026-03-03,PASS
+mnq,momentum_12m,ma=100 mode=long_only,2,22,13558.50,13466.10,6723.90,2022-01-09,2022-12-16,2021-03-04,2026-03-03,PASS
+mnq,momentum_12m,ma=100 mode=long_only,3,22,13558.50,13444.10,6730.90,2022-01-09,2022-12-16,2021-03-04,2026-03-03,PASS
+mnq,seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,1,36,-3563.50,-3678.70,4577.30,2023-07-28,2025-07-31,2021-03-04,2026-03-03,FAIL
+mnq,seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,2,36,-3563.50,-3714.70,4601.30,2023-07-28,2025-07-31,2021-03-04,2026-03-03,FAIL
+mnq,seasonal_window,entry=after_jul5 exit=feb15+ sma100_filter,3,36,-3563.50,-3750.70,4625.30,2023-07-28,2025-07-31,2021-03-04,2026-03-03,FAIL
+mnq,vol_expansion_squeeze,breakout=10,1,202,271.50,-374.90,9899.30,2022-09-08,2023-05-04,2021-03-04,2026-03-03,FAIL
+mnq,vol_expansion_squeeze,breakout=10,2,202,271.50,-576.90,9928.30,2022-09-08,2023-05-04,2021-03-04,2026-03-03,FAIL
+mnq,vol_expansion_squeeze,breakout=10,3,202,271.50,-778.90,9957.30,2022-09-08,2023-05-04,2021-03-04,2026-03-03,FAIL
