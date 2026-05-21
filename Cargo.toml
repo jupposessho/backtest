@@ -246,6 +246,10 @@ path = "src/gold_mechanical_hunt.rs"
 name = "gold_mechanical_cross_asset"
 path = "src/gold_mechanical_cross_asset.rs"
 
+[[bin]]
+name = "mnq_weekday_engulfing_sweep"
+path = "src/mnq_weekday_engulfing_sweep.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"

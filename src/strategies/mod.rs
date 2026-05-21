@@ -11,3 +11,4 @@ pub mod orb_london_reversal;
 pub mod sfp;
 pub mod ttrades_fractal;
 pub mod ttrades_fractal_mtf;
+pub mod weekday_engulfing;
