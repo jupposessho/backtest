@@ -132,6 +132,18 @@ name = "mayne_grid_report"
 path = "src/mayne_grid_report.rs"
 
 [[bin]]
+name = "mayne_eth_fixed_1"
+path = "src/mayne_eth_fixed_1.rs"
+
+[[bin]]
+name = "sol_mtf_sweep_fixed_10"
+path = "src/sol_mtf_sweep_fixed_10.rs"
+
+[[bin]]
+name = "mayne_sol_fixed_10"
+path = "src/mayne_sol_fixed_10.rs"
+
+[[bin]]
 name = "sol_mtf_monthly"
 path = "src/sol_mtf_monthly.rs"
 
@@ -174,6 +186,10 @@ path = "src/portfolio_combo_sweep.rs"
 [[bin]]
 name = "multi_asset_ifvg_report"
 path = "src/multi_asset_ifvg_report.rs"
+
+[[bin]]
+name = "eth_mtf_sweep_fixed"
+path = "src/eth_mtf_sweep_fixed.rs"
 
 [[bin]]
 name = "or_backtest_port"
