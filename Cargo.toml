@@ -275,6 +275,10 @@ path = "src/sonarlab_ob_mtf_sweep.rs"
 name = "ema_ob6_t2_backtest"
 path = "src/ema_ob6_t2_backtest.rs"
 
+[[bin]]
+name = "ict_2022_mes"
+path = "src/ict_2022_mes.rs"
+
 #[[bin]]
 #name = "trade"
 #path = "src/trade.rs"

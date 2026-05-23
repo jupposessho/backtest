@@ -25,10 +25,10 @@
 | 21 | 15m/4h | ifvg_only | last_series_close_break | ny_weekdays | more_hits_close_rr15 | 4 | 50.00 | 1.18 | 7.21 | 7.29 | 7.37 |
 | 22 | 15m/4h | ifvg_only | strict_wick_break | ny_weekdays | more_hits_close_rr15 | 4 | 50.00 | 1.18 | 7.21 | 7.29 | 7.37 |
 | 23 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | baseline | 0 | 0 | 0 | 0 | 0 | 0 |
-| 24 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | more_hits_close_rr12 | 0 | 0 | 0 | 0 | 0 | 0 |
-| 25 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | more_hits_close_rr15 | 0 | 0 | 0 | 0 | 0 | 0 |
-| 26 | 15m/4h | cisd_and_ifvg | failure_swing | london_ny_weekdays | baseline | 0 | 0 | 0 | 0 | 0 | 0 |
-| 27 | 15m/4h | cisd_and_ifvg | failure_swing | london_ny_weekdays | more_hits_close_rr12 | 0 | 0 | 0 | 0 | 0 | 0 |
-| 28 | 15m/4h | cisd_and_ifvg | failure_swing | london_ny_weekdays | more_hits_close_rr15 | 0 | 0 | 0 | 0 | 0 | 0 |
-| 29 | 15m/4h | cisd_and_ifvg | failure_swing | ny_weekdays | baseline | 0 | 0 | 0 | 0 | 0 | 0 |
-| 30 | 15m/4h | cisd_and_ifvg | failure_swing | ny_weekdays | more_hits_close_rr12 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 24 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | max_hits_close_rr05 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 25 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | max_hits_close_rr06 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 26 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | max_hits_ob_level_rr06 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 27 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | more_hits_close_rr12 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 28 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | more_hits_close_rr15 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 29 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | more_hits_ob_level_rr15 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 30 | 15m/4h | cisd_and_ifvg | failure_swing | all_day_all_week | more_hits_ob_mid_rr15 | 0 | 0 | 0 | 0 | 0 | 0 |
