@@ -26,6 +26,10 @@ pub enum EntryModel {
         price: DecimalVec,
         expiry_bars: usize,
     },
+    LimitTradeThrough {
+        price: DecimalVec,
+        expiry_bars: usize,
+    },
     LimitByPolicy {
         policy: EntryPolicy,
         expiry_bars: usize,
@@ -50,6 +54,10 @@ pub enum TrailingModel {
     BreakEvenAtR(Decimal),
     StepAtR { trigger_r: Decimal, lock_r: Decimal },
     ProgressiveHalfR { start_r: Decimal, step_r: Decimal },
+    PreviousClosePoints {
+        trigger_points: Decimal,
+        distance_points: Decimal,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]

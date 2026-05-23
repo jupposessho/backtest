@@ -1,8 +1,7 @@
 use crate::engine::entry_policies::resolve_entry_policy;
 use crate::engine::types::{
-    apply_entry_slippage, apply_exit_slippage, risk_amount, stop_hit, target_hit, EntryModel,
-    EntryPolicy, ExecutionConfig, OpenPosition, SetupCandidate, StopModel, TargetModel,
-    TrailingModel,
+    risk_amount, stop_hit, target_hit, EntryModel, EntryPolicy, ExecutionConfig, OpenPosition,
+    SetupCandidate, StopModel, TargetModel, TrailingModel,
 };
 use crate::model::candle_stick::CandleStick;
 use crate::model::decimal::DecimalVec;
@@ -42,16 +41,30 @@ pub fn run_setups_with_metrics(
     };
     let mut open: Option<OpenPosition> = None;
     let mut setup_idx = 0usize;
+    let mut pending_market: Option<(SetupCandidate, usize)> = None;
     let mut pending_limit: Option<(SetupCandidate, usize, EntryPolicy)> = None;
 
     for (i, c) in candles.iter().copied().enumerate() {
         let mut opened_this_bar = false;
+
+        if open.is_none() {
+            if let Some((candidate, entry_index)) = pending_market {
+                if i >= entry_index {
+                    open = build_position(candidate, i, c.open, c.open_time);
+                    if open.is_some() {
+                        opened_this_bar = true;
+                    }
+                    pending_market = None;
+                }
+            }
+        }
+
         while setup_idx < setups.len() && setups[setup_idx].signal_index < i {
             metrics.skipped_other += 1;
             setup_idx += 1;
         }
 
-        if open.is_none() {
+        if open.is_none() && pending_market.is_none() {
             if let Some((candidate, expires_at, policy)) = pending_limit {
                 if i > expires_at {
                     metrics.limit_orders_expired += 1;
@@ -59,11 +72,41 @@ pub fn run_setups_with_metrics(
                 } else {
                     let previous = if i > 0 { candles[i - 1] } else { c };
                     let price = resolve_entry_policy(policy, candidate.direction, c, previous);
-                    if c.low <= price && c.high >= price {
-                        open = build_position(candidate, i, DecimalVec(price.0), c.open_time, cfg);
-                        if open.is_some() {
+                    let invalidated = candidate_stop_hit(c, candidate);
+                    let touched = c.low <= price && c.high >= price;
+                    let traded_through = match candidate.direction {
+                        crate::model::position_direction::PositionDirection::Long => {
+                            c.low <= DecimalVec(price.0 - cfg.tick_size)
+                        }
+                        crate::model::position_direction::PositionDirection::Short => {
+                            c.high >= DecimalVec(price.0 + cfg.tick_size)
+                        }
+                    };
+                    let fillable = match candidate.entry {
+                        EntryModel::LimitTradeThrough { .. } => traded_through,
+                        _ => touched,
+                    };
+                    if invalidated && !touched {
+                        metrics.limit_orders_expired += 1;
+                        pending_limit = None;
+                    } else if fillable {
+                        if let Some(p) =
+                            build_position(candidate, i, DecimalVec(price.0), c.open_time)
+                        {
                             metrics.limit_orders_filled += 1;
-                            opened_this_bar = true;
+                            if invalidated || stop_hit(c, &p) {
+                                let stop_fill = gap_aware_stop_fill(c, &p);
+                                trades.push(build_trade(
+                                    p,
+                                    c.close_time,
+                                    stop_fill,
+                                    stop_result(&p),
+                                    cfg,
+                                ));
+                            } else {
+                                open = Some(p);
+                                opened_this_bar = true;
+                            }
                         }
                         pending_limit = None;
                     }
@@ -75,22 +118,25 @@ pub fn run_setups_with_metrics(
                 let candidate = setups[setup_idx];
                 match candidate.entry {
                     EntryModel::SignalClose | EntryModel::MarketClose => {
-                        open = build_position(candidate, i, c.close, c.close_time, cfg);
+                        open = build_position(candidate, i, c.close, c.close_time);
                         if open.is_some() {
                             opened_this_bar = true;
                         }
                     }
                     EntryModel::NextBarOpen => {
                         if i + 1 < candles.len() {
-                            let next = candles[i + 1];
-                            open = build_position(candidate, i + 1, next.open, next.open_time, cfg);
-                            if open.is_some() {
-                                opened_this_bar = true;
-                            }
+                            pending_market = Some((candidate, i + 1));
                         }
                     }
                     EntryModel::LimitTouch { expiry_bars, .. } => {
                         if let EntryModel::LimitTouch { price, .. } = candidate.entry {
+                            metrics.limit_orders_placed += 1;
+                            pending_limit =
+                                Some((candidate, i + expiry_bars, EntryPolicy::Price(price)));
+                        }
+                    }
+                    EntryModel::LimitTradeThrough { expiry_bars, .. } => {
+                        if let EntryModel::LimitTradeThrough { price, .. } = candidate.entry {
                             metrics.limit_orders_placed += 1;
                             pending_limit =
                                 Some((candidate, i + expiry_bars, EntryPolicy::Price(price)));
@@ -128,23 +174,19 @@ pub fn run_setups_with_metrics(
                 continue;
             }
 
+            apply_trailing(&mut p, c);
             if stop_hit(c, &p) {
-                let stop_fill = gap_aware_stop_fill(c, &p, cfg);
-                let result = if p.current_stop == p.entry {
-                    TradeResult::BreakEven
-                } else if (p.direction == crate::model::position_direction::PositionDirection::Long
-                    && p.current_stop > p.entry)
-                    || (p.direction == crate::model::position_direction::PositionDirection::Short
-                        && p.current_stop < p.entry)
-                {
-                    TradeResult::Winner
-                } else {
-                    TradeResult::Expense
-                };
-                trades.push(build_trade(p, c.close_time, stop_fill, result, cfg));
+                let stop_fill = gap_aware_stop_fill(c, &p);
+                trades.push(build_trade(
+                    p,
+                    c.close_time,
+                    stop_fill,
+                    stop_result(&p),
+                    cfg,
+                ));
                 open = None;
             } else if target_hit(c, &p) {
-                let tp_fill = apply_exit_slippage(p.direction, p.target, cfg);
+                let tp_fill = p.target;
                 trades.push(build_trade(
                     p,
                     c.close_time,
@@ -154,10 +196,9 @@ pub fn run_setups_with_metrics(
                 ));
                 open = None;
             } else {
-                apply_trailing(&mut p, c);
                 if let Some(max_hold_bars) = p.max_hold_bars {
                     if i.saturating_sub(p.entry_index) >= max_hold_bars {
-                        let exit_px = apply_exit_slippage(p.direction, c.close, cfg);
+                        let exit_px = c.close;
                         let result = time_exit_result(&p, exit_px);
                         trades.push(build_trade(p, c.close_time, exit_px, result, cfg));
                         open = None;
@@ -172,6 +213,9 @@ pub fn run_setups_with_metrics(
     if pending_limit.is_some() {
         metrics.limit_orders_expired += 1;
     }
+    if pending_market.is_some() {
+        metrics.skipped_other += 1;
+    }
 
     (trades, metrics)
 }
@@ -181,9 +225,8 @@ fn build_position(
     entry_index: usize,
     raw_entry: DecimalVec,
     open_time: i64,
-    cfg: &ExecutionConfig,
 ) -> Option<OpenPosition> {
-    let entry = apply_entry_slippage(candidate.direction, raw_entry, cfg);
+    let entry = raw_entry;
     let stop = match candidate.stop {
         StopModel::FixedPrice(px) => px,
     };
@@ -222,6 +265,30 @@ fn build_position(
         trailing: candidate.trailing,
         max_hold_bars: candidate.max_hold_bars,
     })
+}
+
+fn candidate_stop_hit(c: CandleStick, candidate: SetupCandidate) -> bool {
+    let stop = match candidate.stop {
+        StopModel::FixedPrice(px) => px,
+    };
+    match candidate.direction {
+        crate::model::position_direction::PositionDirection::Long => c.low <= stop,
+        crate::model::position_direction::PositionDirection::Short => c.high >= stop,
+    }
+}
+
+fn stop_result(p: &OpenPosition) -> TradeResult {
+    if p.current_stop == p.entry {
+        TradeResult::BreakEven
+    } else if (p.direction == crate::model::position_direction::PositionDirection::Long
+        && p.current_stop > p.entry)
+        || (p.direction == crate::model::position_direction::PositionDirection::Short
+            && p.current_stop < p.entry)
+    {
+        TradeResult::Winner
+    } else {
+        TradeResult::Expense
+    }
 }
 
 fn time_exit_result(p: &OpenPosition, exit_px: DecimalVec) -> TradeResult {
@@ -334,23 +401,54 @@ fn apply_trailing(position: &mut OpenPosition, c: CandleStick) {
                 }
             }
         }
+        TrailingModel::PreviousClosePoints {
+            trigger_points,
+            distance_points,
+        } => {
+            let reference = c.close.0;
+            let profit_points = match position.direction {
+                crate::model::position_direction::PositionDirection::Long => {
+                    reference - position.entry.0
+                }
+                crate::model::position_direction::PositionDirection::Short => {
+                    position.entry.0 - reference
+                }
+            };
+            if profit_points < trigger_points {
+                return;
+            }
+            match position.direction {
+                crate::model::position_direction::PositionDirection::Long => {
+                    let candidate = DecimalVec(reference - distance_points);
+                    if candidate > position.current_stop {
+                        position.current_stop = candidate;
+                    }
+                }
+                crate::model::position_direction::PositionDirection::Short => {
+                    let candidate = DecimalVec(reference + distance_points);
+                    if candidate < position.current_stop {
+                        position.current_stop = candidate;
+                    }
+                }
+            }
+        }
     }
 }
 
-fn gap_aware_stop_fill(c: CandleStick, p: &OpenPosition, cfg: &ExecutionConfig) -> DecimalVec {
+fn gap_aware_stop_fill(c: CandleStick, p: &OpenPosition) -> DecimalVec {
     match p.direction {
         crate::model::position_direction::PositionDirection::Long => {
             if c.open <= p.current_stop {
-                apply_exit_slippage(p.direction, DecimalVec(c.open.0), cfg)
+                DecimalVec(c.open.0)
             } else {
-                apply_exit_slippage(p.direction, p.current_stop, cfg)
+                p.current_stop
             }
         }
         crate::model::position_direction::PositionDirection::Short => {
             if c.open >= p.current_stop {
-                apply_exit_slippage(p.direction, DecimalVec(c.open.0), cfg)
+                DecimalVec(c.open.0)
             } else {
-                apply_exit_slippage(p.direction, p.current_stop, cfg)
+                p.current_stop
             }
         }
     }
@@ -381,5 +479,93 @@ fn build_trade(
         commission,
         slippage,
         fees,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::position_direction::PositionDirection;
+
+    fn dv(value: i64) -> DecimalVec {
+        DecimalVec(Decimal::from(value))
+    }
+
+    fn candle(index: i64, open: i64, high: i64, low: i64, close: i64) -> CandleStick {
+        CandleStick {
+            open_time: index * 60,
+            close_time: index * 60 + 59,
+            open: dv(open),
+            high: dv(high),
+            low: dv(low),
+            close: dv(close),
+        }
+    }
+
+    fn long_setup(entry: EntryModel) -> SetupCandidate {
+        SetupCandidate {
+            direction: PositionDirection::Long,
+            signal_index: 0,
+            entry,
+            stop: StopModel::FixedPrice(dv(95)),
+            target: TargetModel::FixedPrice(dv(110)),
+            trailing: TrailingModel::None,
+            max_hold_bars: None,
+        }
+    }
+
+    #[test]
+    fn next_bar_open_does_not_exit_on_entry_bar() {
+        let candles = vec![
+            candle(0, 100, 101, 99, 100),
+            candle(1, 100, 101, 90, 96),
+            candle(2, 96, 110, 96, 110),
+        ];
+        let setup = long_setup(EntryModel::NextBarOpen);
+
+        let trades = run_setups(&candles, &[setup], &ExecutionConfig::default());
+
+        assert_eq!(trades.len(), 1);
+        assert_eq!(trades[0].result, TradeResult::Winner);
+        assert_eq!(trades[0].open_time, candles[1].open_time);
+        assert_eq!(trades[0].close_time, candles[2].close_time);
+    }
+
+    #[test]
+    fn slippage_is_a_cost_not_baked_into_fill_prices() {
+        let candles = vec![
+            candle(0, 100, 101, 99, 100),
+            candle(1, 100, 101, 99, 100),
+            candle(2, 100, 110, 100, 110),
+        ];
+        let cfg = ExecutionConfig {
+            slippage_ticks_per_side: 1,
+            tick_size: Decimal::new(25, 2),
+            ..ExecutionConfig::default()
+        };
+
+        let trades = run_setups(&candles, &[long_setup(EntryModel::NextBarOpen)], &cfg);
+
+        assert_eq!(trades.len(), 1);
+        assert_eq!(trades[0].entry, dv(100));
+        assert_eq!(trades[0].tp, dv(110));
+        assert_eq!(trades[0].slippage, Decimal::new(50, 2));
+    }
+
+    #[test]
+    fn limit_fill_stops_out_on_same_bar_conservatively() {
+        let candles = vec![candle(0, 100, 101, 99, 100), candle(1, 101, 102, 94, 96)];
+        let setup = long_setup(EntryModel::LimitTouch {
+            price: dv(100),
+            expiry_bars: 2,
+        });
+
+        let trades = run_setups(&candles, &[setup], &ExecutionConfig::default());
+
+        assert_eq!(trades.len(), 1);
+        assert_eq!(trades[0].result, TradeResult::Expense);
+        assert_eq!(trades[0].entry, dv(100));
+        assert_eq!(trades[0].tp, dv(95));
+        assert_eq!(trades[0].close_time, candles[1].close_time);
     }
 }

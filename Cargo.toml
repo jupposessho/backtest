@@ -33,6 +33,7 @@ binance = { git = "https://github.com/wisespace-io/binance-rs.git" }
 lazy_static = "1.4"
 parquet = "53"
 rayon = "1.10"
+rand = "0.8"
 
 [[bin]]
 name = "gallery"
@@ -249,6 +250,14 @@ path = "src/gold_mechanical_cross_asset.rs"
 [[bin]]
 name = "mnq_weekday_engulfing_sweep"
 path = "src/mnq_weekday_engulfing_sweep.rs"
+
+[[bin]]
+name = "sonarlab_ob_mtf_sweep"
+path = "src/sonarlab_ob_mtf_sweep.rs"
+
+[[bin]]
+name = "ema_ob6_t2_backtest"
+path = "src/ema_ob6_t2_backtest.rs"
 
 #[[bin]]
 #name = "trade"

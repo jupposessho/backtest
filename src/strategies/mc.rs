@@ -1213,6 +1213,7 @@ impl Mc {
             EntryModel::SignalClose | EntryModel::MarketClose => actual.close,
             EntryModel::NextBarOpen => actual.close,
             EntryModel::LimitTouch { price, .. } => price,
+            EntryModel::LimitTradeThrough { price, .. } => price,
             EntryModel::LimitByPolicy { policy, .. } => {
                 resolve_entry_policy(policy, direction, actual, previous)
             }
@@ -1249,6 +1250,12 @@ impl Mc {
                                 price: repriced,
                                 expiry_bars,
                             },
+                            EntryModel::LimitTradeThrough { expiry_bars, .. } => {
+                                EntryModel::LimitTradeThrough {
+                                    price: repriced,
+                                    expiry_bars,
+                                }
+                            }
                             _ => return None,
                         };
                     }
